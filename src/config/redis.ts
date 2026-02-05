@@ -1,6 +1,6 @@
 import { Redis as UpstashRedis } from '@upstash/redis';
 import { Redis as IORedis } from 'ioredis';
-import config from './index.js';
+import config from './index';
 
 // Upstash Redis client (REST API - for cache operations)
 export const upstashRedis = config.redis.url && config.redis.token

@@ -1,5 +1,6 @@
 import rateLimit, { RateLimitRequestHandler } from 'express-rate-limit';
 import RedisStore from 'rate-limit-redis';
+
 import { ioRedis } from '../config/redis.js';
 import config from '../config/index.js';
 import { AuthenticatedRequest } from '../types/index.js';

@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import * as authController from 'controllers/authController.js';
-// import { validate } from '../middleware/validate.js';
-// import { protect } from '../middleware/auth.js';
 
+
+import * as authController from 'controllers/authController.js';
 import { loginLimiter, signupLimiter } from 'middleware/rateLimiter.js';
 import { signupSchema, loginSchema, checkEmailSchema, changePasswordSchema } from 'utils/validators.js';
 import { validate } from 'middleware/validate.js';

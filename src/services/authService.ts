@@ -1,5 +1,7 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
+
 import config from 'config/index.js';
 import User, { IUserDocument } from 'models/User.js';
 import RefreshToken from 'models/RefreshToken.js';
@@ -7,7 +9,6 @@ import CreatorPage from 'models/CreatorPage.js';
 import { JWTPayload, UserRole } from 'types/index.js';
 import { SignupInput, LoginInput, ChangePasswordInput } from 'utils/validators.js';
 import { createError } from 'middleware/errorHandler.js';
-import { OAuth2Client } from 'google-auth-library';
 
 const client = new OAuth2Client(
     process.env.GOOGLE_CLIENT_ID,

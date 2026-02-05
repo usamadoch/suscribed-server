@@ -109,7 +109,7 @@ export const requireCreator = requireRole('creator', 'admin');
 export const requireAdmin = requireRole('admin');
 
 import { Permission } from '../types/index.js';
-import { hasPermission } from 'constants/permissions.js';
+import { hasPermission } from '../constants/permissions.js';
 
 // Require specific permission
 export const requirePermission = (permission: Permission) => {

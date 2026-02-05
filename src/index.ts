@@ -17,15 +17,15 @@ import swaggerUi from 'swagger-ui-express';
 
 import config from 'config/index.js';
 import logger, { correlationIdMiddleware, requestLogger } from 'config/logger.js';
-import { apiLimiter } from 'middleware/rateLimiter';
-import { closeRedisConnections, ioRedis } from 'config/redis';
-import swaggerSpec from 'config/swagger';
+import { apiLimiter } from 'middleware/rateLimiter.js';
+import { closeRedisConnections, ioRedis } from 'config/redis.js';
+import swaggerSpec from 'config/swagger.js';
 
 
 // Import routes
 import authRoutes from 'routes/auth.js';
-import errorHandler from 'middleware/errorHandler';
-import { connectDB } from 'config/database';
+import errorHandler from 'middleware/errorHandler.js';
+import { connectDB } from 'config/database.js';
 
 const app: Application = express();
 const httpServer = createServer(app);

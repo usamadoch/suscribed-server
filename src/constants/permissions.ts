@@ -1,5 +1,5 @@
 
-import { Permission, UserRole } from "types";
+import { Permission, UserRole } from "../types/index.js";
 
 export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     creator: [

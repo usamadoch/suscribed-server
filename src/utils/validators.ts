@@ -59,24 +59,39 @@ export const changePasswordSchema = z.object({
 
 // Post schemas
 // Post schemas
+// Media attachment schema
+const baseMediaSchema = z.object({
+    url: z.string(),
+    filename: z.string(),
+    fileSize: z.number(),
+    mimeType: z.string(),
+    dimensions: z.object({
+        width: z.number(),
+        height: z.number(),
+    }).optional(),
+});
+
+const imageAttachmentSchema = baseMediaSchema.extend({
+    type: z.literal('image'),
+});
+
+const videoAttachmentSchema = baseMediaSchema.extend({
+    type: z.literal('video'),
+    thumbnailUrl: z.string(),
+    duration: z.number(),
+});
+
+const mediaAttachmentSchema = z.discriminatedUnion('type', [
+    imageAttachmentSchema,
+    videoAttachmentSchema,
+]);
+
 export const createPostSchema = z.object({
     caption: z.string().min(1, 'Caption is required').max(2200),
-    mediaAttachments: z.array(z.object({
-        type: z.enum(['image', 'video']),
-        url: z.string(),
-        thumbnailUrl: z.string().optional(),
-        filename: z.string(),
-        fileSize: z.number(),
-        mimeType: z.string(),
-        duration: z.number().optional(),
-        dimensions: z.object({
-            width: z.number(),
-            height: z.number(),
-        }).optional(),
-    })).max(10).optional(),
+    mediaAttachments: z.array(mediaAttachmentSchema).max(10).default([]),
     visibility: z.enum(['public', 'members']).default('public'),
     postType: z.enum(['text', 'image', 'video']).default('text'),
-    tags: z.array(z.string().max(30)).max(10).optional(),
+    tags: z.array(z.string().max(30)).max(10).default([]),
     allowComments: z.boolean().default(true),
     status: z.enum(['draft', 'published']).default('draft'),
     scheduledFor: z.string().datetime().optional(),

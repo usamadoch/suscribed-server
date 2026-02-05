@@ -6,30 +6,6 @@ export interface IUserDocument extends Omit<IUser, '_id'>, Document {
     comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
-const defaultNotificationPreferences: NotificationPreferences = {
-    email: {
-        newMembers: true,
-        newComments: true,
-        newMessages: true,
-        weeklyDigest: true,
-    },
-    push: {
-        newMembers: true,
-        newPosts: true,
-        newComments: true,
-        newMessages: true,
-        mentions: true,
-    },
-    inApp: {
-        all: true,
-    },
-    quietHours: {
-        enabled: false,
-        startTime: '22:00',
-        endTime: '08:00',
-        timezone: 'UTC',
-    },
-};
 
 const userSchema = new Schema<IUserDocument>(
     {
@@ -96,8 +72,28 @@ const userSchema = new Schema<IUserDocument>(
             sparse: true,
         },
         notificationPreferences: {
-            type: Schema.Types.Mixed,
-            default: defaultNotificationPreferences,
+            email: {
+                newMembers: { type: Boolean, default: true },
+                newComments: { type: Boolean, default: true },
+                newMessages: { type: Boolean, default: true },
+                weeklyDigest: { type: Boolean, default: true },
+            },
+            push: {
+                newMembers: { type: Boolean, default: true },
+                newPosts: { type: Boolean, default: true },
+                newComments: { type: Boolean, default: true },
+                newMessages: { type: Boolean, default: true },
+                mentions: { type: Boolean, default: true },
+            },
+            inApp: {
+                all: { type: Boolean, default: true },
+            },
+            quietHours: {
+                enabled: { type: Boolean, default: false },
+                startTime: { type: String, default: '22:00' },
+                endTime: { type: String, default: '08:00' },
+                timezone: { type: String, default: 'UTC' },
+            },
         },
     },
     {

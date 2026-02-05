@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, RequestHandler } from 'express';
 
 
 import * as authController from '../controllers/authController.js';
@@ -139,7 +139,7 @@ router.post('/refresh', authController.refresh);
  *       401:
  *         description: Not authenticated
  */
-router.post('/logout', protect, authController.logout);
+router.post('/logout', protect, authController.logout as unknown as RequestHandler);
 
 /**
  * @swagger
@@ -163,7 +163,7 @@ router.post('/logout', protect, authController.logout);
  *       401:
  *         description: Not authenticated
  */
-router.get('/me', protect, authController.me);
+router.get('/me', protect, authController.me as unknown as RequestHandler);
 /**
  * @swagger
  * /auth/change-password:
@@ -190,6 +190,6 @@ router.get('/me', protect, authController.me);
  *       400:
  *         description: Invalid password or validation error
  */
-router.post('/change-password', protect, validate(changePasswordSchema), authController.changePassword);
+router.post('/change-password', protect, validate(changePasswordSchema), authController.changePassword as unknown as RequestHandler);
 
 export default router;

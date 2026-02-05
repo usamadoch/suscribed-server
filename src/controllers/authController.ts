@@ -200,11 +200,10 @@ export const logout = async (
 ): Promise<void> => {
     try {
         const refreshToken = req.cookies.refreshToken;
-        const userId = req.user?._id.toString();
+        // user is guaranteed by AuthenticatedRequest
+        const userId = req.user._id.toString();
 
-        if (userId) {
-            await authService.logout(userId, refreshToken);
-        }
+        await authService.logout(userId, refreshToken);
 
         // Clear cookies
         res.clearCookie('accessToken', cookieOptions);
@@ -226,19 +225,7 @@ export const me = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const userId = req.user?._id.toString();
-
-        if (!userId) {
-            res.status(401).json({
-                success: false,
-                error: {
-                    code: 'UNAUTHORIZED',
-                    message: 'Not authenticated',
-                },
-            });
-            return;
-        }
-
+        const userId = req.user._id.toString();
         const user = await authService.getCurrentUser(userId);
 
         if (!user) {
@@ -268,19 +255,7 @@ export const changePassword = async (
     next: NextFunction
 ): Promise<void> => {
     try {
-        const userId = req.user?._id.toString();
-
-        if (!userId) {
-            res.status(401).json({
-                success: false,
-                error: {
-                    code: 'UNAUTHORIZED',
-                    message: 'Not authenticated',
-                },
-            });
-            return;
-        }
-
+        const userId = req.user._id.toString();
         await authService.changePassword(userId, req.body);
 
         res.json({

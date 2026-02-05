@@ -31,7 +31,7 @@ export interface IUser {
     isEmailVerified: boolean;
     isActive: boolean;
     lastLoginAt: Date;
-    googleId?: string;
+    googleId?: string; // Optional: Only present for Google-authenticated users
     notificationPreferences: NotificationPreferences;
     createdAt: Date;
     updatedAt: Date;
@@ -63,10 +63,12 @@ export interface NotificationPreferences {
 }
 
 // Social links
+export type SocialPlatform = 'twitter' | 'instagram' | 'youtube' | 'tiktok' | 'discord' | 'website' | 'facebook' | 'linkedin' | 'pinterest' | 'x' | 'other';
+
 export interface SocialLink {
-    platform: 'twitter' | 'instagram' | 'youtube' | 'tiktok' | 'discord' | 'website' | 'facebook' | 'linkedin' | 'pinterest' | 'x' | 'other';
+    platform: SocialPlatform;
     url: string;
-    label?: string;
+    label?: string; // Optional: Label is purely decorative/informational
 }
 
 // Page theme
@@ -102,16 +104,25 @@ export type PostType = 'text' | 'image' | 'video'; // Audio/poll/link removed as
 export type PostStatus = 'draft' | 'scheduled' | 'published';
 export type PostVisibility = 'public' | 'members';
 
-export interface MediaAttachment {
-    type: 'image' | 'video';
+export interface BaseMediaAttachment {
     url: string;
-    thumbnailUrl?: string;
     filename: string;
     fileSize: number;
     mimeType: string;
-    duration?: number;
     dimensions?: { width: number; height: number };
 }
+
+export interface ImageAttachment extends BaseMediaAttachment {
+    type: 'image';
+}
+
+export interface VideoAttachment extends BaseMediaAttachment {
+    type: 'video';
+    thumbnailUrl: string; // Required for videos
+    duration: number;     // Required for videos
+}
+
+export type MediaAttachment = ImageAttachment | VideoAttachment;
 
 export interface IPost {
     _id: Types.ObjectId;
@@ -240,6 +251,10 @@ export interface IComment {
 
 // Auth request extension
 export interface AuthenticatedRequest extends Request {
+    user: IUser; // Required: This interface serves requests where auth is guaranteed
+}
+
+export interface MaybeAuthenticatedRequest extends Request {
     user?: IUser;
 }
 

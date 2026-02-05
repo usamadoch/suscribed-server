@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ErrorCodes, ErrorMessages, ErrorStatusCodes, ErrorCode } from '../utils/errorCodes.js';
-import logger from 'config/logger.js';
+import logger from '../config/logger.js';
 
 /**
  * Standard API Error Response Structure

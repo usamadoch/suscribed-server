@@ -4,7 +4,7 @@ import { AuthenticatedRequest, JWTPayload, UserRole } from '../types/index.js';
 import config from '../config/index.js';
 
 import { createUnauthorizedError, createForbiddenError } from './errorHandler.js';
-import User from 'models/User.js';
+import User from '../models/User.js';
 
 // Protect routes - require authentication
 export const protect = async (

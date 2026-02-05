@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { ICreatorPage, SocialLink, PageTheme } from 'types/index.js';
+import { ICreatorPage, SocialLink, PageTheme } from '../types/index.js';
 
 export interface ICreatorPageDocument extends Omit<ICreatorPage, '_id'>, Document { }
 

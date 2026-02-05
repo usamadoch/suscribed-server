@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { IRefreshToken } from 'types/index.js';
+import { IRefreshToken } from '../types/index.js';
 
 export interface IRefreshTokenDocument extends Omit<IRefreshToken, '_id'>, Document { }
 

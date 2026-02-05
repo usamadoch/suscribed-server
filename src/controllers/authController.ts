@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthenticatedRequest } from 'types/index.js';
-import * as authService from 'services/authService.js';
-import config from 'config/index.js';
+import { AuthenticatedRequest } from '../types/index.js';
+import * as authService from '../services/authService.js';
+import config from '../config/index.js';
 
 // Cookie options
 // Cookie options

@@ -23,16 +23,20 @@ export const protect = async (
         }
 
         if (!token) {
+            console.log('[Auth] No token provided');
             return next(createUnauthorizedError('No token provided'));
         }
 
         // Verify token
+        console.log('[Auth] Verifying token...');
         const decoded = jwt.verify(token, config.jwt.accessSecret) as JWTPayload;
 
+        console.log('[Auth] Token verified, fetching user:', decoded.userId);
         // Get user from database
         const user = await User.findById(decoded.userId).select('-passwordHash');
 
         if (!user) {
+            console.log('[Auth] User not found in DB');
             return next(createUnauthorizedError('User not found'));
         }
 
@@ -42,8 +46,10 @@ export const protect = async (
 
         // Attach user to request
         req.user = user;
+        console.log(`[Auth] User ${user._id} authenticated`);
         next();
     } catch (error) {
+        console.error('[Auth] Error in protect middleware:', error);
         if (error instanceof jwt.TokenExpiredError) {
             return next(createUnauthorizedError('Token expired'));
         }

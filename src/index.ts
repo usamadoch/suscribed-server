@@ -42,7 +42,14 @@ app.use(requestLogger);
 
 // CORS configuration
 app.use(cors({
-    origin: config.clientUrl,
+    origin: (origin, callback) => {
+        const allowedOrigins = config.clientUrl.split(',').map(url => url.trim());
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']

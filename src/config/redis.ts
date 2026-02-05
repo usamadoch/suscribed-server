@@ -12,11 +12,17 @@ export const upstashRedis = config.redis.url && config.redis.token
 
 // IORedis client (TCP - for BullMQ and rate limiting)
 // Only create if explicitly configured - otherwise use in-memory store
+// IORedis client (TCP - for BullMQ and rate limiting)
+// Only create if explicitly configured - otherwise use in-memory store
 export const ioRedis = config.redis.ioRedisUrl
     ? new IORedis(config.redis.ioRedisUrl, {
         maxRetriesPerRequest: null, // Required for BullMQ
         enableReadyCheck: false,
         lazyConnect: true,
+        // Automatically enable TLS if URL starts with rediss://
+        tls: config.redis.ioRedisUrl.startsWith('rediss://') ? {
+            rejectUnauthorized: false // Often needed for self-signed certificates or some cloud providers
+        } : undefined
     })
     : null;
 

@@ -10,7 +10,7 @@ const cookieOptions = {
     secure: config.env === 'production',
     sameSite: config.env === 'production' ? 'none' as const : 'lax' as const,
     path: '/',
-    domain: config.env === 'production' ? '.onrender.com' : undefined // Optional but helps sometimes
+    // domain: config.env === 'production' ? '.onrender.com' : undefined // REMOVE: onrender.com is a public suffix
 };
 
 // Signup controller

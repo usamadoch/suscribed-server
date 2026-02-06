@@ -301,3 +301,11 @@ export interface IRefreshToken {
     expiresAt: Date;
     createdAt: Date;
 }
+
+export interface UploadedFile {
+    url: string;
+    filename: string;
+    fileSize: number;
+    mimeType: string;
+}
+

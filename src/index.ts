@@ -25,6 +25,7 @@ import swaggerSpec from './config/swagger.js';
 // Import routes
 import authRoutes from './routes/auth.js';
 import pageRoutes from './routes/page.js';
+import uploadRoutes from './routes/upload.js';
 import errorHandler from './middleware/errorHandler.js';
 import { connectDB } from './config/database.js';
 
@@ -127,6 +128,7 @@ app.use('/api', apiLimiter);
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/pages', pageRoutes);
+app.use('/api/upload', uploadRoutes);
 
 
 

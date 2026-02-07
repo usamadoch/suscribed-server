@@ -1,5 +1,6 @@
 import express, { Application, Request, Response } from 'express';
 import { createServer } from 'http';
+import { Server as SocketIOServer } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -7,17 +8,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 import cors from 'cors';
-import dotenv from 'dotenv';
-import morgan from 'morgan';
+
 import cookieParser from 'cookie-parser';
 import mongoose from 'mongoose';
 import swaggerUi from 'swagger-ui-express';
 
 
 
+// Middleware
+import { apiLimiter } from './middleware/rateLimiter.js';
+
+// Config
 import config from './config/index.js';
 import logger, { correlationIdMiddleware, requestLogger } from './config/logger.js';
-import { apiLimiter } from './middleware/rateLimiter.js';
 import { closeRedisConnections, ioRedis } from './config/redis.js';
 import swaggerSpec from './config/swagger.js';
 
@@ -26,12 +29,37 @@ import swaggerSpec from './config/swagger.js';
 import authRoutes from './routes/auth.js';
 import pageRoutes from './routes/page.js';
 import uploadRoutes from './routes/upload.js';
+import membershipRoutes from './routes/membership.js';
+import postRoutes from './routes/post.js';
+import conversationRoutes from './routes/conversation.js';
 import errorHandler from './middleware/errorHandler.js';
 import { connectDB } from './config/database.js';
+import mediaRoutes from './routes/media.js';
+import userRoutes from './routes/user.js';
+
+
+// Import socket handlers
+import { initializeSockets } from './sockets/index.js';
+
+
 
 const app: Application = express();
 const httpServer = createServer(app);
 
+
+
+// Socket.io setup
+const io = new SocketIOServer(httpServer, {
+    cors: {
+        origin: config.clientUrl,
+        credentials: true,
+    },
+    pingTimeout: 60000,
+    pingInterval: 25000,
+});
+
+// Make io accessible to routes
+app.set('io', io);
 
 
 
@@ -57,7 +85,14 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-app.use(express.json({ limit: '10mb' }));
+// JSON body parsing - skip for Mux webhook which needs raw body
+app.use((req, res, next) => {
+    // Mux webhook requires raw body for signature verification
+    if (req.path === '/api/media/mux/webhook') {
+        return next();
+    }
+    express.json({ limit: '10mb' })(req, res, next);
+});
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser(config.cookie.secret));
 
@@ -125,10 +160,18 @@ app.get('/api/ready', async (_req: Request, res: Response) => {
 // Apply rate limiting to API routes
 app.use('/api', apiLimiter);
 
+
+// ... 
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/pages', pageRoutes);
-app.use('/api/upload', uploadRoutes);
+app.use('/api/upload', uploadRoutes); // Keeping legacy for now or general file uploads
+app.use('/api/media', mediaRoutes); // New media pipeline
+app.use('/api/memberships', membershipRoutes);
+app.use('/api/posts', postRoutes);
+app.use('/api/conversations', conversationRoutes);
+app.use('/api/users', userRoutes);
 
 
 
@@ -150,6 +193,9 @@ app.use(errorHandler);
 
 
 
+// Initialize socket handlers
+initializeSockets(io);
+
 
 
 
@@ -164,9 +210,9 @@ const gracefulShutdown = async (signal: string): Promise<void> => {
     });
 
     // Close Socket.io connections
-    // io.close(() => {
-    //     logger.info('Socket.io connections closed');
-    // });
+    io.close(() => {
+        logger.info('Socket.io connections closed');
+    });
 
     try {
         // Stop background workers
@@ -247,5 +293,5 @@ const startServer = async (): Promise<void> => {
 
 startServer();
 
-export { app };
+export { app, io };
 

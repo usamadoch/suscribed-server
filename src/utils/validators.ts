@@ -58,10 +58,8 @@ export const changePasswordSchema = z.object({
 });
 
 // Post schemas
-// Post schemas
-// Media attachment schema
+// Media attachment schema - base fields shared by all media types
 const baseMediaSchema = z.object({
-    url: z.string(),
     filename: z.string(),
     fileSize: z.number(),
     mimeType: z.string(),
@@ -73,12 +71,19 @@ const baseMediaSchema = z.object({
 
 const imageAttachmentSchema = baseMediaSchema.extend({
     type: z.literal('image'),
+    url: z.string().min(1, 'Image URL is required'), // Images always have URL from Cloudinary
+    cloudinaryPublicId: z.string().optional(),
 });
 
 const videoAttachmentSchema = baseMediaSchema.extend({
     type: z.literal('video'),
-    thumbnailUrl: z.string(),
-    duration: z.number(),
+    url: z.string().optional().default(''), // URL populated by Mux webhook later
+    thumbnailUrl: z.string().optional().default(''),
+    duration: z.number().optional().default(0),
+    muxUploadId: z.string().optional(),
+    muxAssetId: z.string().optional(),
+    muxPlaybackId: z.string().optional(),
+    status: z.enum(['preparing', 'ready', 'errored']).optional(),
 });
 
 const mediaAttachmentSchema = z.discriminatedUnion('type', [

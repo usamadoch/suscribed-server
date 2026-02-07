@@ -38,6 +38,16 @@ interface Config {
         useBackgroundJobs: boolean;
         enableAuditLogs: boolean;
     };
+    mux: {
+        tokenId: string;
+        tokenSecret: string;
+        webhookSecret: string;
+    };
+    cloudinary: {
+        cloudName: string;
+        apiKey: string;
+        apiSecret: string;
+    };
 }
 
 import { fileURLToPath } from 'url';
@@ -80,6 +90,16 @@ const config: Config = {
         useBackgroundJobs: process.env.FEATURE_BACKGROUND_JOBS === 'true',
         enableAuditLogs: process.env.FEATURE_AUDIT_LOGS !== 'false', // default on
     },
+    mux: {
+        tokenId: process.env.MUX_TOKEN_ID || '',
+        tokenSecret: process.env.MUX_TOKEN_SECRET || '',
+        webhookSecret: process.env.MUX_WEBHOOK_SECRET || '',
+    },
+    cloudinary: {
+        cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
+        apiKey: process.env.CLOUDINARY_API_KEY || '',
+        apiSecret: process.env.CLOUDINARY_API_SECRET || '',
+    }
 };
 
 export default config;

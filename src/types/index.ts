@@ -112,12 +112,19 @@ export interface BaseMediaAttachment {
     dimensions?: { width: number; height: number };
 }
 
+export type MediaStatus = 'preparing' | 'ready' | 'errored';
+
 export interface ImageAttachment extends BaseMediaAttachment {
     type: 'image';
+    cloudinaryPublicId?: string; // Optional for migration, required for new
 }
 
 export interface VideoAttachment extends BaseMediaAttachment {
     type: 'video';
+    muxUploadId?: string;
+    muxAssetId?: string;
+    muxPlaybackId?: string;
+    status?: MediaStatus;
     thumbnailUrl: string; // Required for videos
     duration: number;     // Required for videos
 }
@@ -204,6 +211,7 @@ export interface IConversation {
 }
 
 // Notifications
+// Notifications
 export type NotificationType =
     | 'new_member'
     | 'member_left'
@@ -216,6 +224,19 @@ export type NotificationType =
     | 'creator_went_live'
     | 'system';
 
+export interface BaseNotificationMetadata {
+    [key: string]: unknown;
+}
+
+export interface NewMessageMetadata extends BaseNotificationMetadata {
+    conversationId: string;
+    messageCount: number;
+}
+
+export type NotificationMetadata =
+    | NewMessageMetadata
+    | BaseNotificationMetadata;
+
 export interface INotification {
     _id: Types.ObjectId;
     recipientId: Types.ObjectId;
@@ -225,11 +246,12 @@ export interface INotification {
     imageUrl: string | null;
     actionUrl: string;
     actionLabel: string;
-    metadata: Record<string, unknown>;
+    metadata: NotificationMetadata;
     isRead: boolean;
     readAt: Date | null;
     createdAt: Date;
     expiresAt: Date | null;
+    updatedAt: Date;
 }
 
 // Comments

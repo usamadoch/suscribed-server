@@ -12,7 +12,7 @@ const mediaAttachmentSchema = new Schema<MediaAttachment>(
         },
         url: {
             type: String,
-            required: true,
+            required: false, // For Mux videos, URL is populated by webhook after upload
         },
         thumbnailUrl: String,
         filename: {
@@ -32,30 +32,23 @@ const mediaAttachmentSchema = new Schema<MediaAttachment>(
             width: Number,
             height: Number,
         },
+        // Cloudinary fields
+        cloudinaryPublicId: String,
+        // Mux fields
+        muxUploadId: String,
+        muxAssetId: String,
+        muxPlaybackId: String,
+        status: {
+            type: String,
+            enum: ['preparing', 'ready', 'errored'],
+            default: undefined
+        }
     },
     { _id: false }
 );
 
-// EditorJS block schema - NO LONGER USED BUT KEPT FOR REFERENCE IF NEEDED TO MIGRATE OLD DATA
-/*
-const editorBlockSchema = new Schema(
-    {
-        id: { type: String },
-        type: { type: String, required: true },
-        data: { type: Schema.Types.Mixed },
-    },
-    { _id: false }
-);
+// EditorJS block schema removed
 
-const editorJSContentSchema = new Schema<EditorJSContent>(
-    {
-        time: Number,
-        blocks: [editorBlockSchema],
-        version: String,
-    },
-    { _id: false }
-);
-*/
 
 const postSchema = new Schema<IPostDocument>(
     {
@@ -156,6 +149,9 @@ postSchema.index({ createdAt: -1 });
 postSchema.index({ publishedAt: -1 });
 postSchema.index({ viewCount: -1 });
 postSchema.index({ likeCount: -1 });
+// Mux webhook lookup indexes
+postSchema.index({ "mediaAttachments.muxUploadId": 1 });
+postSchema.index({ "mediaAttachments.muxAssetId": 1 });
 
 const Post = mongoose.model<IPostDocument>('Post', postSchema);
 

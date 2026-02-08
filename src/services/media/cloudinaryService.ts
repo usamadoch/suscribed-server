@@ -12,14 +12,18 @@ export const cloudinaryService = {
      * Generates a signature for client-side uploads.
      * @returns {Object} { signature, timestamp, apiKey, cloudName }
      */
-    generateSignature: (folder?: string) => {
+    generateSignature: (folder?: string, public_id?: string) => {
         const timestamp = Math.round((new Date()).getTime() / 1000);
 
         const params: Record<string, any> = {
             timestamp,
         };
 
-        if (folder) {
+        if (public_id) {
+            params.public_id = public_id;
+            // When public_id is provided content-aware, folder is implied by the public_id path structure
+            // and should NOT be included as a separate parameter for signature.
+        } else if (folder) {
             params.folder = folder;
         }
 
@@ -30,7 +34,8 @@ export const cloudinaryService = {
             signature,
             apiKey: config.cloudinary.apiKey,
             cloudName: config.cloudinary.cloudName,
-            folder // Return the folder used for signing
+            folder: public_id ? undefined : folder, // Don't return folder if public_id handles it
+            public_id
         };
     },
 

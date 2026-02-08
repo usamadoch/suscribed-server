@@ -1,3 +1,4 @@
+
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest, SuccessResponse } from '../types/index.js';
 import { cloudinaryService } from '../services/media/cloudinaryService.js';
@@ -5,13 +6,81 @@ import { muxService } from '../services/media/muxService.js';
 import Post from '../models/Post.js';
 import { VideoAttachment } from '../types/index.js';
 
+// Helper to sanitize path components
+const sanitize = (str: string) => str.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+
 export const getCloudinarySignature = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const folder = req.query.folder as string | undefined;
-        const signatureData = cloudinaryService.generateSignature(folder);
+        const type = req.query.type as string; // 'avatar', 'banner', 'post_img', 'thumbnail'
+        const refId = req.query.refId as string | undefined; // postId
+        const userId = req.user._id.toString();
+        const username = sanitize(req.user.username);
+        const env = process.env.NODE_ENV === 'production' ? 'prod' : 'dev';
+
+        // 1. Role-based Access Control
+        if (req.user.role === 'member') {
+            if (type !== 'avatar') {
+                res.status(403).json({
+                    success: false,
+                    error: { code: 'FORBIDDEN', message: 'Members can only upload avatars' }
+                });
+                return;
+            }
+        }
+
+        // 2. Ownership Validation (for Posts)
+        if (refId && (type === 'post_img' || type === 'thumbnail')) {
+            // Check if post exists
+            const post = await Post.findById(refId);
+            if (post) {
+                // Post exists, verify ownership
+                if (post.creatorId.toString() !== userId) {
+                    res.status(403).json({
+                        success: false,
+                        error: { code: 'FORBIDDEN', message: 'You do not own this post' }
+                    });
+                    return;
+                }
+            } else {
+                // Post does not exist (New Draft)
+                // We allow uploading to a non-existent ID because the client generates the ID
+                // and the folder structure forces it under THIS user's directory.
+                // So they can't upload to someone else's folder.
+                // We just trust it's a new draft.
+            }
+        }
+
+        // 3. Construct Public ID
+        // Structure: env/u_{userId}/{username}/{context}/{filename}
+        const timestamp = Math.round(new Date().getTime() / 1000);
+        let folderPath = `${env}/u_${userId}/${username}`;
+        let filename = `${type}_${timestamp}`;
+
+        if (type === 'avatar') {
+            folderPath += `/profile`;
+        } else if (type === 'banner') {
+            folderPath += `/banner`;
+        } else if ((type === 'post_img' || type === 'thumbnail') && refId) {
+            folderPath += `/p_${refId}`;
+        } else {
+            // Fallback for other types or missing refId
+            folderPath += `/misc`;
+        }
+
+        const public_id = `${folderPath}/${filename}`;
+
+        // 4. Generate Signature including public_id
+        // When signing public_id, we don't strictly need to pass 'folder' param to Cloudinary upload,
+        // but 'public_id' param is required.
+        // We pass 'public_id' to generateSignature to include it in the signature.
+        const signatureData = cloudinaryService.generateSignature(undefined, public_id);
+
         res.json({
             success: true,
-            data: signatureData
+            data: {
+                ...signatureData,
+                public_id // Return explicitly so client can send it
+            }
         });
     } catch (error) {
         next(error);
@@ -20,7 +89,24 @@ export const getCloudinarySignature = async (req: AuthenticatedRequest, res: Res
 
 export const getMuxUploadUrl = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const uploadData = await muxService.createDirectUpload();
+        // 1. Role-based Access Control
+        if (req.user.role === 'member') {
+            res.status(403).json({
+                success: false,
+                error: { code: 'FORBIDDEN', message: 'Members cannot upload videos' }
+            });
+            return;
+        }
+
+        const refId = req.query.refId as string | undefined;
+        const userId = req.user._id.toString();
+        const env = process.env.NODE_ENV === 'production' ? 'prod' : 'dev';
+
+        // 2. Metadata for Mux Passthrough
+        // Format: user_id:{userId}|env:{env}|ref_id:{refId}
+        const passthrough = `user_id:${userId}|env:${env}${refId ? `|ref_id:${refId}` : ''}`;
+
+        const uploadData = await muxService.createDirectUpload(passthrough);
 
         res.json({
             success: true,
@@ -28,6 +114,34 @@ export const getMuxUploadUrl = async (req: AuthenticatedRequest, res: Response, 
                 url: uploadData.url,
                 uploadId: uploadData.uploadId
             }
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const deleteMedia = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { type } = req.params;
+        const id = req.params.id as string;
+
+        if (!id) {
+            res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'ID is required' } });
+            return;
+        }
+
+        if (type === 'image') {
+            await cloudinaryService.deleteImage(id);
+        } else if (type === 'video') {
+            await muxService.deleteAsset(id);
+        } else {
+            res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Invalid media type' } });
+            return;
+        }
+
+        res.json({
+            success: true,
+            message: 'Media deleted successfully'
         });
     } catch (error) {
         next(error);
@@ -162,6 +276,3 @@ export const handleMuxWebhook = async (req: any, res: Response, next: NextFuncti
         res.status(400).send("Webhook verification failed or error processing");
     }
 };
-
-
-

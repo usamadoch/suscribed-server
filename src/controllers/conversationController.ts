@@ -3,9 +3,7 @@ import { AuthenticatedRequest } from '../types/index.js';
 import Conversation from '../models/Conversation.js';
 import Message from '../models/Message.js';
 import Membership from '../models/Membership.js';
-import { NotificationService } from '../services/notificationService.js';
 import { Server as SocketIOServer } from 'socket.io';
-import { isUserInConversation } from '../sockets/index.js';
 
 // Get user's conversations
 export const getConversations = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -212,36 +210,19 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
             }
         );
 
-        // Emit socket event (if socket server is available)
+        // Emit socket event for real-time updates (if socket server is available)
         const io: SocketIOServer | undefined = req.app.get('io');
         if (io) {
+            // Emit to conversation room for real-time message display
             io.to(`conversation:${conversationId}`).emit('new_message', message);
+            // Emit to recipient's user room for unread count update in sidebar
             io.to(`user:${recipientId?.toString()}`).emit('new_message_notification', {
                 conversationId,
                 message,
             });
         }
 
-        // Create notification
-        if (recipientId) {
-            // Check if recipient is already in the conversation
-            const shouldNotify = !io || !isUserInConversation(io, recipientId.toString(), conversationId);
-
-            if (shouldNotify) {
-                await NotificationService.sendNotification(
-                    recipientId.toString(),
-                    'new_message',
-                    'New message',
-                    `${req.user.displayName}: ${req.body.content.substring(0, 50)}...`,
-                    {
-                        actionUrl: `/messages/${conversationId}`,
-                        actionLabel: 'Reply',
-                        metadata: { conversationId, messageId: message._id },
-                        io: req.app.get('io')
-                    }
-                );
-            }
-        }
+        // NOTE: No push notification for messages - sidebar unread badge is sufficient
 
         res.status(201).json({
             success: true,
@@ -301,6 +282,69 @@ export const markMessageAsRead = async (req: AuthenticatedRequest, res: Response
         res.json({
             success: true,
             data: { message },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Get total unread message count across all conversations
+export const getUnreadMessageCount = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const userId = req.user._id.toString();
+
+        // Aggregate unread counts from all user's conversations
+        // unreadCounts is stored as a Map, so we need to convert and filter
+        const result = await Conversation.aggregate([
+            {
+                $match: {
+                    participants: req.user._id,
+                    isActive: true,
+                },
+            },
+            {
+                // Convert the Map to an array of key-value pairs
+                $addFields: {
+                    unreadCountsArray: { $objectToArray: '$unreadCounts' },
+                },
+            },
+            {
+                // Find the unread count for this specific user
+                $addFields: {
+                    userUnreadCount: {
+                        $let: {
+                            vars: {
+                                userEntry: {
+                                    $filter: {
+                                        input: '$unreadCountsArray',
+                                        as: 'entry',
+                                        cond: { $eq: ['$$entry.k', userId] },
+                                    },
+                                },
+                            },
+                            in: {
+                                $ifNull: [
+                                    { $arrayElemAt: ['$$userEntry.v', 0] },
+                                    0,
+                                ],
+                            },
+                        },
+                    },
+                },
+            },
+            {
+                $group: {
+                    _id: null,
+                    totalUnread: { $sum: '$userUnreadCount' },
+                },
+            },
+        ]);
+
+        const totalUnread = result.length > 0 ? result[0].totalUnread : 0;
+
+        res.json({
+            success: true,
+            data: { count: totalUnread },
         });
     } catch (error) {
         next(error);

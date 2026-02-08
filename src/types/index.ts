@@ -153,6 +153,67 @@ export interface IPost {
     updatedAt: Date;
 }
 
+// ============================================================================
+// SANITIZED POST RESPONSE TYPES (Access-Controlled Responses)
+// ============================================================================
+
+/**
+ * Locked media attachment - original URLs are nulled, only blurred previews
+ */
+export interface LockedImageAttachment {
+    type: 'image';
+    url: null;
+    thumbnailUrl: string | null;
+    filename: string;
+    fileSize: number;
+    mimeType: string;
+    dimensions?: { width: number; height: number };
+}
+
+export interface LockedVideoAttachment {
+    type: 'video';
+    url: null;
+    thumbnailUrl: string | null;
+    filename: string;
+    fileSize: number;
+    mimeType: string;
+    dimensions?: { width: number; height: number };
+    muxPlaybackId: null;
+    muxAssetId: null;
+    duration?: number;
+    status?: MediaStatus;
+}
+
+export type LockedMediaAttachment = LockedImageAttachment | LockedVideoAttachment;
+
+/**
+ * Post with full access - user is authorized to see all content
+ */
+export interface UnlockedPostResponse extends Omit<IPost, '_id' | 'creatorId' | 'pageId'> {
+    _id: Types.ObjectId | string;
+    creatorId: Types.ObjectId | string | { _id: string; displayName?: string; username?: string; avatarUrl?: string | null };
+    pageId: Types.ObjectId | string | { _id: string; pageSlug: string; displayName?: string; avatarUrl?: string | null };
+    isLocked: false;
+}
+
+/**
+ * Post with locked access - sensitive content is redacted
+ */
+export interface LockedPostResponse extends Omit<IPost, '_id' | 'creatorId' | 'pageId' | 'caption' | 'mediaAttachments'> {
+    _id: Types.ObjectId | string;
+    creatorId: Types.ObjectId | string | { _id: string; displayName?: string; username?: string; avatarUrl?: string | null };
+    pageId: Types.ObjectId | string | { _id: string; pageSlug: string; displayName?: string; avatarUrl?: string | null };
+    caption: null;                      // Redacted
+    teaser: string;                     // Short preview or static message
+    mediaAttachments: LockedMediaAttachment[];
+    isLocked: true;
+}
+
+/**
+ * Discriminated union for type-safe handling of post responses
+ */
+export type SanitizedPostResponse = UnlockedPostResponse | LockedPostResponse;
+
 // Membership
 export type MembershipStatus = 'active' | 'paused' | 'cancelled';
 

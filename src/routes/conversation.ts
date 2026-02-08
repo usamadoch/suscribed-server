@@ -9,6 +9,9 @@ const router = Router();
 // Get user's conversations
 router.get('/', protect, conversationController.getConversations as RequestHandler);
 
+// Get total unread message count (for sidebar badge)
+router.get('/unread-count', protect, conversationController.getUnreadMessageCount as RequestHandler);
+
 // Start or get existing conversation
 router.post('/', protect, conversationController.createConversation as RequestHandler);
 

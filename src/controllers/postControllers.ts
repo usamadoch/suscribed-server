@@ -9,6 +9,7 @@ import Membership from '../models/Membership.js';
 import { NotificationService } from '../services/notificationService.js';
 import { cloudinaryService } from '../services/media/cloudinaryService.js';
 import { muxService } from '../services/media/muxService.js';
+import { sanitizePostForClient, sanitizePostsForClient, AccessContext } from '../utils/postAccessControl.js';
 
 // Get posts (with filters)
 export const getPosts = async (req: MaybeAuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -19,7 +20,6 @@ export const getPosts = async (req: MaybeAuthenticatedRequest, res: Response, ne
             status = 'published',
             page = 1,
             limit = 10,
-            visibility,
         } = req.query;
 
         const query: Record<string, unknown> = { status };
@@ -28,52 +28,59 @@ export const getPosts = async (req: MaybeAuthenticatedRequest, res: Response, ne
             query.creatorId = creatorId;
         }
 
+        let targetPageId: string | null = null;
         if (pageSlug) {
             const creatorPage = await CreatorPage.findOne({ pageSlug: String(pageSlug).toLowerCase() });
             if (creatorPage) {
                 query.pageId = creatorPage._id;
+                targetPageId = creatorPage._id.toString();
             }
         }
 
-        // Handle visibility based on membership
-        if (visibility === 'members' && req.user && query.creatorId) {
-            // Check membership
-            const membership = await Membership.findOne({
-                memberId: req.user._id, // Safe access: req.user is guarded
-                creatorId: String(query.creatorId),
-                status: 'active',
-            });
-
-            if (!membership) {
-                query.visibility = 'public';
-            }
-        } else if (visibility === 'members' && !req.user) {
-            // Unauthenticated user requesting members-only posts
-            res.status(401).json({
-                success: false,
-                error: { code: 'UNAUTHORIZED', message: 'Authentication required' },
-            });
-            return;
-        } else if (!req.user || visibility === 'public') {
-            query.visibility = 'public';
-        }
-
-        // Temporary simplification: if no specific filters, show all published posts
-        // In real app, this should filter by what the user follows/subscribes to
-
-        // const posts = await Post.find(query)
-        const posts = await Post.find({}) // Show everything for now to debug
+        // Fetch posts (don't filter by visibility here - we'll sanitize based on access)
+        const posts = await Post.find(query)
             .populate('creatorId', 'displayName username avatarUrl')
-            .sort({ isPinned: -1, createdAt: -1 }) // Sort by createdAt for now as publishedAt might be null
+            .populate('pageId', 'pageSlug displayName avatarUrl')
+            .sort({ isPinned: -1, createdAt: -1 })
             .skip((Number(page) - 1) * Number(limit))
             .limit(Number(limit));
 
-        // const total = await Post.countDocuments(query);
-        const total = await Post.countDocuments({});
+        const total = await Post.countDocuments(query);
+
+        // Build membership map for efficient access checking
+        const membershipMap = new Map<string, boolean>();
+
+        if (req.user) {
+            // Get unique creator IDs from the posts
+            const creatorIds = [...new Set(posts.map(p => {
+                const cId = p.creatorId;
+                return typeof cId === 'object' && cId._id
+                    ? cId._id.toString()
+                    : cId.toString();
+            }))];
+
+            // Batch check memberships
+            const memberships = await Membership.find({
+                memberId: req.user._id,
+                creatorId: { $in: creatorIds },
+                status: 'active',
+            }).select('creatorId');
+
+            memberships.forEach(m => {
+                membershipMap.set(m.creatorId.toString(), true);
+            });
+        }
+
+        // Sanitize all posts based on access
+        const sanitizedPosts = sanitizePostsForClient(
+            posts,
+            req.user?._id?.toString() || null,
+            membershipMap
+        );
 
         res.json({
             success: true,
-            data: { posts },
+            data: { posts: sanitizedPosts },
             meta: {
                 pagination: {
                     page: Number(page),
@@ -94,7 +101,8 @@ export const getPosts = async (req: MaybeAuthenticatedRequest, res: Response, ne
 export const getPostById = async (req: MaybeAuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const post = await Post.findById(req.params.id)
-            .populate('creatorId', 'displayName username avatarUrl');
+            .populate('creatorId', 'displayName username avatarUrl')
+            .populate('pageId', 'pageSlug displayName avatarUrl');
 
         if (!post) {
             res.status(404).json({
@@ -104,34 +112,35 @@ export const getPostById = async (req: MaybeAuthenticatedRequest, res: Response,
             return;
         }
 
-        // Check access for members-only posts
-        if (post.visibility === 'members' && post.status === 'published') {
-            const isOwner = req.user?._id.toString() === post.creatorId._id.toString();
+        // Extract creator ID (handle populated vs non-populated)
+        const creatorId = typeof post.creatorId === 'object' && post.creatorId._id
+            ? post.creatorId._id.toString()
+            : post.creatorId.toString();
 
-            if (!isOwner) {
-                const membership = await Membership.findOne({
-                    memberId: req.user?._id,
-                    creatorId: post.creatorId._id,
-                    status: 'active',
-                });
+        // Build access context
+        const userId = req.user?._id?.toString() || null;
+        const isOwner = userId !== null && userId === creatorId;
 
-                if (!membership) {
-                    res.status(403).json({
-                        success: false,
-                        error: { code: 'FORBIDDEN', message: 'Members only content' },
-                    });
-                    return;
-                }
-            }
+        // Check membership for member-only posts
+        let isMember = false;
+        if (post.visibility === 'members' && !isOwner && req.user) {
+            const membership = await Membership.findOne({
+                memberId: req.user._id,
+                creatorId: creatorId,
+                status: 'active',
+            });
+            isMember = !!membership;
         }
 
-        // Track view
+        const ctx: AccessContext = { userId, isOwner, isMember };
+
+        // Track view (always, even for locked posts)
         const sessionId = req.cookies?.sessionId || req.ip || 'anonymous';
         await PostView.updateOne(
             { postId: post._id, sessionId },
             {
                 $set: { viewedAt: new Date() },
-                $setOnInsert: { userId: req.user?._id || null }, // Optional access: req.user might be undefined
+                $setOnInsert: { userId: req.user?._id || null },
             },
             { upsert: true }
         );
@@ -146,9 +155,15 @@ export const getPostById = async (req: MaybeAuthenticatedRequest, res: Response,
             isLiked = !!like;
         }
 
+        // Sanitize the post based on access
+        const sanitizedPost = sanitizePostForClient(post, ctx);
+
         res.json({
             success: true,
-            data: { post: { ...post.toObject(), viewCount: post.viewCount + 1 }, isLiked },
+            data: {
+                post: { ...sanitizedPost, viewCount: (post.viewCount || 0) + 1 },
+                isLiked,
+            },
         });
     } catch (error) {
         next(error);

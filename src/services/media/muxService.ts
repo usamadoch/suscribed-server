@@ -13,11 +13,12 @@ export const muxService = {
      * Creates a direct upload URL for the client.
      * @returns {Promise<Object>} { url, uploadId }
      */
-    createDirectUpload: async () => {
+    createDirectUpload: async (passthrough?: string) => {
         const upload = await mux.video.uploads.create({
             new_asset_settings: {
                 playback_policy: ['public'],
                 // Note: mp4_support removed - 'standard' is deprecated on basic tier
+                ...(passthrough && { passthrough }),
             },
             cors_origin: config.clientUrl, // Important for browser uploads
         });

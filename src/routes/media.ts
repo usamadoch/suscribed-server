@@ -4,7 +4,8 @@ import { protect } from '../middleware/auth.js';
 import {
     getCloudinarySignature,
     getMuxUploadUrl,
-    handleMuxWebhook
+    handleMuxWebhook,
+    deleteMedia
 } from '../controllers/mediaController.js';
 
 const router = Router();
@@ -14,6 +15,9 @@ router.get('/cloudinary/signature', protect, getCloudinarySignature as RequestHa
 
 // Get Mux Upload URL (Auth required)
 router.get('/mux/upload-url', protect, getMuxUploadUrl as RequestHandler);
+
+// Delete Media (Auth required)
+router.delete('/:type/:id', protect, deleteMedia as RequestHandler);
 
 // Mux Webhook (Public, Raw body for verification)
 // We need to use express.raw for this specific route to verify signatures

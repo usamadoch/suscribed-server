@@ -28,7 +28,7 @@ import swaggerSpec from './config/swagger.js';
 // Import routes
 import authRoutes from './routes/auth.js';
 import pageRoutes from './routes/page.js';
-import uploadRoutes from './routes/upload.js';
+
 import membershipRoutes from './routes/membership.js';
 import postRoutes from './routes/post.js';
 import conversationRoutes from './routes/conversation.js';
@@ -167,7 +167,7 @@ app.use('/api', apiLimiter);
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/pages', pageRoutes);
-app.use('/api/upload', uploadRoutes); // Keeping legacy for now or general file uploads
+
 app.use('/api/media', mediaRoutes); // New media pipeline
 app.use('/api/memberships', membershipRoutes);
 app.use('/api/posts', postRoutes);

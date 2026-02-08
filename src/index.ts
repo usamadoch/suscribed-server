@@ -36,6 +36,7 @@ import errorHandler from './middleware/errorHandler.js';
 import { connectDB } from './config/database.js';
 import mediaRoutes from './routes/media.js';
 import userRoutes from './routes/user.js';
+import notificationRoutes from './routes/notification.js';
 
 
 // Import socket handlers
@@ -172,6 +173,7 @@ app.use('/api/memberships', membershipRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 
 

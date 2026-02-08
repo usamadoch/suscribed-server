@@ -46,7 +46,7 @@ router.delete('/:id', protect, requireCreator, deletePost as RequestHandler);
 router.post('/:id/like', protect, toggleLikePost as RequestHandler);
 
 // Get comments
-router.get('/:id/comments', getPostComments as RequestHandler);
+router.get('/:id/comments', optionalAuth, getPostComments as RequestHandler);
 
 // Add comment
 router.post(

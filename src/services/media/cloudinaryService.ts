@@ -12,12 +12,16 @@ export const cloudinaryService = {
      * Generates a signature for client-side uploads.
      * @returns {Object} { signature, timestamp, apiKey, cloudName }
      */
-    generateSignature: () => {
+    generateSignature: (folder?: string) => {
         const timestamp = Math.round((new Date()).getTime() / 1000);
-        // We can add eager transformations or folders here if needed
-        const params = {
+
+        const params: Record<string, any> = {
             timestamp,
         };
+
+        if (folder) {
+            params.folder = folder;
+        }
 
         const signature = cloudinary.utils.api_sign_request(params, config.cloudinary.apiSecret);
 
@@ -26,6 +30,7 @@ export const cloudinaryService = {
             signature,
             apiKey: config.cloudinary.apiKey,
             cloudName: config.cloudinary.cloudName,
+            folder // Return the folder used for signing
         };
     },
 

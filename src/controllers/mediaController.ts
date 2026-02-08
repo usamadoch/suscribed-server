@@ -7,7 +7,8 @@ import { VideoAttachment } from '../types/index.js';
 
 export const getCloudinarySignature = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const signatureData = cloudinaryService.generateSignature();
+        const folder = req.query.folder as string | undefined;
+        const signatureData = cloudinaryService.generateSignature(folder);
         res.json({
             success: true,
             data: signatureData

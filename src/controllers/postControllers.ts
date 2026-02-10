@@ -49,6 +49,7 @@ export const getPosts = async (req: MaybeAuthenticatedRequest, res: Response, ne
 
         // Build membership map for efficient access checking
         const membershipMap = new Map<string, boolean>();
+        const likedPostIds = new Set<string>();
 
         if (req.user) {
             // Get unique creator IDs from the posts
@@ -69,6 +70,16 @@ export const getPosts = async (req: MaybeAuthenticatedRequest, res: Response, ne
             memberships.forEach(m => {
                 membershipMap.set(m.creatorId.toString(), true);
             });
+
+            // Batch check likes
+            const likes = await PostLike.find({
+                userId: req.user._id,
+                postId: { $in: posts.map(p => p._id) }
+            }).select('postId');
+
+            likes.forEach(like => {
+                likedPostIds.add(like.postId.toString());
+            });
         }
 
         // Sanitize all posts based on access
@@ -78,9 +89,15 @@ export const getPosts = async (req: MaybeAuthenticatedRequest, res: Response, ne
             membershipMap
         );
 
+        // Augment with isLiked status
+        const postsWithLikes = sanitizedPosts.map(post => ({
+            ...post,
+            isLiked: likedPostIds.has(post._id.toString())
+        }));
+
         res.json({
             success: true,
-            data: { posts: sanitizedPosts },
+            data: { posts: postsWithLikes },
             meta: {
                 pagination: {
                     page: Number(page),
@@ -204,7 +221,14 @@ export const createPost = async (req: AuthenticatedRequest, res: Response, next:
                             }
 
                             if (asset.tracks && Array.isArray(asset.tracks)) {
-                                const videoTrack = asset.tracks.find((t: any) => t.type === 'video') as any;
+                                interface MuxTrack {
+                                    type: string;
+                                    width?: number;
+                                    height?: number;
+                                    max_width?: number;
+                                    max_height?: number;
+                                }
+                                const videoTrack = (asset.tracks as MuxTrack[]).find(t => t.type === 'video');
                                 if (videoTrack) {
                                     const width = videoTrack.width || videoTrack.max_width;
                                     const height = videoTrack.height || videoTrack.max_height;

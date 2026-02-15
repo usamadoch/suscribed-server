@@ -20,12 +20,22 @@ export const getPosts = async (req: MaybeAuthenticatedRequest, res: Response, ne
             status = 'published',
             page = 1,
             limit = 10,
+            type,
         } = req.query;
 
         const query: Record<string, unknown> = { status };
 
         if (creatorId) {
             query.creatorId = creatorId;
+        }
+
+        if (type) {
+            const types = String(type).split(',');
+            if (types.length === 1) {
+                query.postType = types[0];
+            } else {
+                query.postType = { $in: types };
+            }
         }
 
         let targetPageId: string | null = null;

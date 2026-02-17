@@ -1,4 +1,5 @@
-import { Router, RequestHandler } from 'express';
+import { Router, RequestHandler, Request, Response, NextFunction } from 'express';
+import { AuthenticatedRequest } from '../types/index.js';
 
 
 import * as authController from '../controllers/authController.js';
@@ -8,6 +9,14 @@ import { validate } from '../middleware/validate.js';
 import { protect } from '../middleware/auth.js';
 
 const router = Router();
+
+// Type-safe wrapper for authenticated handlers
+// After protect middleware, req is guaranteed to be AuthenticatedRequest
+const asAuthHandler = (handler: (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+) => Promise<void>): RequestHandler => handler as any;
 
 /**
  * @swagger
@@ -139,7 +148,7 @@ router.post('/refresh', authController.refresh);
  *       401:
  *         description: Not authenticated
  */
-router.post('/logout', protect, authController.logout as unknown as RequestHandler);
+router.post('/logout', protect, asAuthHandler(authController.logout));
 
 /**
  * @swagger
@@ -163,7 +172,7 @@ router.post('/logout', protect, authController.logout as unknown as RequestHandl
  *       401:
  *         description: Not authenticated
  */
-router.get('/me', protect, authController.me as unknown as RequestHandler);
+router.get('/me', protect, asAuthHandler(authController.me));
 /**
  * @swagger
  * /auth/change-password:
@@ -190,6 +199,56 @@ router.get('/me', protect, authController.me as unknown as RequestHandler);
  *       400:
  *         description: Invalid password or validation error
  */
-router.post('/change-password', protect, validate(changePasswordSchema), authController.changePassword as unknown as RequestHandler);
+router.post('/change-password', protect, validate(changePasswordSchema), asAuthHandler(authController.changePassword));
 
 export default router;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

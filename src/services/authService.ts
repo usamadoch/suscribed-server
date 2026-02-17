@@ -322,4 +322,7 @@ export const changePassword = async (
     // Update password
     user.passwordHash = newPassword; // Pre-save hook will hash it
     await user.save();
+
+    // Invalidate all existing sessions
+    await RefreshToken.deleteMany({ userId });
 };

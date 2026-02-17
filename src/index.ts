@@ -38,6 +38,7 @@ import mediaRoutes from './routes/media.js';
 import userRoutes from './routes/user.js';
 import notificationRoutes from './routes/notification.js';
 import analyticsRoutes from './routes/analytics.js';
+import seedRoutes from './routes/seedRoutes.js';
 
 
 // Import socket handlers
@@ -176,6 +177,7 @@ app.use('/api/conversations', conversationRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/seed', seedRoutes);
 
 
 

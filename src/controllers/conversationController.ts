@@ -103,7 +103,7 @@ export const createConversation = async (req: AuthenticatedRequest, res: Respons
 // Get conversation messages
 export const getConversationMessages = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { page = 1, limit = 50 } = req.query;
+        const { page, limit = 20, cursor } = req.query;
         const userId = req.user._id;
 
         // Verify user is participant
@@ -120,13 +120,18 @@ export const getConversationMessages = async (req: AuthenticatedRequest, res: Re
             return;
         }
 
-        const messages = await Message.find({
+        const query: any = {
             conversationId: req.params.id,
             isDeleted: false,
-        })
+        };
+
+        if (cursor) {
+            query.createdAt = { $lt: cursor };
+        }
+
+        const messages = await Message.find(query)
             .populate('senderId', 'displayName username avatarUrl')
             .sort({ createdAt: -1 })
-            .skip((Number(page) - 1) * Number(limit))
             .limit(Number(limit));
 
         const total = await Message.countDocuments({
@@ -141,17 +146,21 @@ export const getConversationMessages = async (req: AuthenticatedRequest, res: Re
             { $set: { [unreadKey]: 0 } }
         );
 
+        const nextCursor = messages.length > 0 ? messages[messages.length - 1].createdAt : null;
+        const hasMore = messages.length === Number(limit);
+
         res.json({
             success: true,
-            data: { messages: messages.reverse() },
+            data: {
+                messages, // Returns Newest -> Oldest
+                nextCursor
+            },
             meta: {
                 pagination: {
-                    page: Number(page),
                     limit: Number(limit),
                     totalItems: total,
-                    totalPages: Math.ceil(total / Number(limit)),
-                    hasNextPage: Number(page) * Number(limit) < total,
-                    hasPrevPage: Number(page) > 1,
+                    cursor: nextCursor,
+                    hasNextPage: hasMore
                 },
             },
         });

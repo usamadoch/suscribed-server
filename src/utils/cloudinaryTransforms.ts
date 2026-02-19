@@ -15,7 +15,7 @@ import config from '../config/index.js';
  * Generates a heavily blurred, low-quality preview URL for locked images.
  * 
  * Uses Cloudinary's on-the-fly transformation:
- * - e_blur:2000 - Heavy Gaussian blur
+ * - e_blur:400 - Light Gaussian blur (approx 3px)
  * - q_10 - 10% quality (lossy, tiny file)
  * - w_400 - Max width 400px for bandwidth
  * 
@@ -32,7 +32,7 @@ export function generateBlurredImageUrl(publicId: string | undefined): string | 
     }
 
     // URL-based transformation
-    return `https://res.cloudinary.com/${cloudName}/image/upload/e_blur:2000,q_10,w_400/${publicId}`;
+    return `https://res.cloudinary.com/${cloudName}/image/upload/e_blur:400,q_10,w_400/${publicId}`;
 }
 
 /**

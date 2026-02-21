@@ -6,7 +6,7 @@ import config from '../config/index.js';
 import User, { IUserDocument } from '../models/User.js';
 import RefreshToken from '../models/RefreshToken.js';
 import CreatorPage from '../models/CreatorPage.js';
-import { JWTPayload, UserRole } from '../types/index.js';
+import { JWTPayload, UserRole, ONBOARDING_STEPS, OnboardingStep } from '../types/index.js';
 import { SignupInput, LoginInput, ChangePasswordInput } from '../utils/validators.js';
 import { createError } from '../middleware/errorHandler.js';
 
@@ -92,6 +92,7 @@ export const signup = async (input: SignupInput): Promise<AuthResponse> => {
         username: username.toLowerCase(),
         role,
         isEmailVerified: true, // Skip email verification for MVP
+        onboardingStep: role === 'creator' ? ONBOARDING_STEPS.ACCOUNT_CREATED : ONBOARDING_STEPS.COMPLETE,
     });
 
     // If creator, create their page
@@ -202,7 +203,8 @@ export const googleLogin = async (code: string, role: string = 'member'): Promis
             role: role as UserRole,
             isEmailVerified: true,
             googleId,
-            avatarUrl: picture
+            avatarUrl: picture,
+            onboardingStep: role === 'creator' ? ONBOARDING_STEPS.ACCOUNT_CREATED : ONBOARDING_STEPS.COMPLETE,
         });
 
         // Ensure creator page creation if needed? User role is 'member' by default so no.
@@ -325,4 +327,31 @@ export const changePassword = async (
 
     // Invalidate all existing sessions
     await RefreshToken.deleteMany({ userId });
+};
+
+// Update onboarding step
+export const updateOnboardingStep = async (
+    userId: string,
+    step: number
+): Promise<Partial<IUserDocument> | null> => {
+    if (step < ONBOARDING_STEPS.ACCOUNT_CREATED || step > ONBOARDING_STEPS.COMPLETE) {
+        throw createError.invalidInput(`Invalid onboarding step. Must be between ${ONBOARDING_STEPS.ACCOUNT_CREATED} and ${ONBOARDING_STEPS.COMPLETE}.`);
+    }
+
+    const validStep = step as OnboardingStep;
+
+    const user = await User.findById(userId);
+    if (!user) {
+        throw createError.userNotFound();
+    }
+
+    // Only allow forward movement (prevent going back)
+    if (validStep <= user.onboardingStep) {
+        return sanitizeUser(user);
+    }
+
+    user.onboardingStep = validStep;
+    await user.save();
+
+    return sanitizeUser(user);
 };

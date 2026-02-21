@@ -4,6 +4,18 @@ import { Types } from 'mongoose';
 // User types
 export type UserRole = 'member' | 'creator' | 'admin';
 
+// Onboarding step: strict literal union representing each stage of creator onboarding.
+// 0 = not started, 1 = account created, 2 = details done, 3 = category done, 4 = complete
+export type OnboardingStep = 0 | 1 | 2 | 3 | 4;
+
+export const ONBOARDING_STEPS = {
+    NOT_STARTED: 0 as const,
+    ACCOUNT_CREATED: 1 as const,
+    DETAILS_DONE: 2 as const,
+    CATEGORY_DONE: 3 as const,
+    COMPLETE: 4 as const,
+};
+
 export type Permission =
     | 'post:create'
     | 'post:read'
@@ -32,6 +44,7 @@ export interface IUser {
     isActive: boolean;
     lastLoginAt: Date;
     googleId?: string; // Optional: Only present for Google-authenticated users
+    onboardingStep: OnboardingStep;
     notificationPreferences: NotificationPreferences;
     createdAt: Date;
     updatedAt: Date;

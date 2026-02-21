@@ -201,6 +201,33 @@ router.get('/me', protect, asAuthHandler(authController.me));
  */
 router.post('/change-password', protect, validate(changePasswordSchema), asAuthHandler(authController.changePassword));
 
+/**
+ * @swagger
+ * /auth/onboarding-step:
+ *   patch:
+ *     summary: Update onboarding step
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [step]
+ *             properties:
+ *               step: { type: number, minimum: 1, maximum: 4 }
+ *     responses:
+ *       200:
+ *         description: Onboarding step updated
+ *       401:
+ *         description: Not authenticated
+ *       400:
+ *         description: Invalid step
+ */
+router.patch('/onboarding-step', protect, asAuthHandler(authController.updateOnboardingStep));
+
 export default router;
 
 

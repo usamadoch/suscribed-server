@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthenticatedRequest } from '../types/index.js';
+import { AuthenticatedRequest, ONBOARDING_STEPS } from '../types/index.js';
 import * as authService from '../services/authService.js';
 import config from '../config/index.js';
 
@@ -261,6 +261,38 @@ export const changePassword = async (
         res.json({
             success: true,
             data: { message: 'Password updated successfully' },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Update onboarding step controller
+export const updateOnboardingStep = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const userId = req.user._id.toString();
+        const { step } = req.body;
+
+        if (typeof step !== 'number' || step < ONBOARDING_STEPS.ACCOUNT_CREATED || step > ONBOARDING_STEPS.COMPLETE) {
+            res.status(400).json({
+                success: false,
+                error: {
+                    code: 'VALIDATION_ERROR',
+                    message: `Step must be a number between ${ONBOARDING_STEPS.ACCOUNT_CREATED} and ${ONBOARDING_STEPS.COMPLETE}`,
+                },
+            });
+            return;
+        }
+
+        const user = await authService.updateOnboardingStep(userId, step);
+
+        res.json({
+            success: true,
+            data: { user },
         });
     } catch (error) {
         next(error);

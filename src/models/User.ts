@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import bcrypt from 'bcryptjs';
-import { IUser, NotificationPreferences, UserRole } from '../types/index.js';
+import { IUser, NotificationPreferences, UserRole, ONBOARDING_STEPS } from '../types/index.js';
 
 export interface IUserDocument extends Omit<IUser, '_id'>, Document {
     comparePassword(candidatePassword: string): Promise<boolean>;
@@ -70,6 +70,12 @@ const userSchema = new Schema<IUserDocument>(
         googleId: {
             type: String,
             sparse: true,
+        },
+        onboardingStep: {
+            type: Number,
+            default: ONBOARDING_STEPS.NOT_STARTED,
+            min: ONBOARDING_STEPS.NOT_STARTED,
+            max: ONBOARDING_STEPS.COMPLETE,
         },
         notificationPreferences: {
             email: {

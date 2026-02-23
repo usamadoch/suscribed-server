@@ -411,7 +411,7 @@ export const deletePost = async (req: AuthenticatedRequest, res: Response, next:
     }
 };
 
-// Like / Unlike post
+// Like / Unlike post (idempotent — safe against race conditions & double-clicks)
 export const toggleLikePost = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const postId = req.params.id;
@@ -420,25 +420,45 @@ export const toggleLikePost = async (req: AuthenticatedRequest, res: Response, n
         const existingLike = await PostLike.findOne({ postId, userId });
 
         if (existingLike) {
-            // Unlike
-            await PostLike.deleteOne({ _id: existingLike._id });
-            await Post.updateOne({ _id: postId }, { $inc: { likeCount: -1 } });
+            // Unlike — only decrement if we actually deleted a record
+            const deleted = await PostLike.findOneAndDelete({ postId, userId });
+            if (deleted) {
+                // Guard: never decrement below 0
+                await Post.updateOne(
+                    { _id: postId, likeCount: { $gt: 0 } },
+                    { $inc: { likeCount: -1 } }
+                );
+            }
 
+            const post = await Post.findById(postId).select('likeCount');
             res.json({
                 success: true,
-                data: { liked: false },
+                data: { liked: false, likeCount: post?.likeCount ?? 0 },
             });
         } else {
-            // Like
-            await PostLike.create({ postId, userId });
-            const post = await Post.findByIdAndUpdate(
-                postId,
-                { $inc: { likeCount: 1 } },
-                { new: true }
-            );
+            // Like — use try/catch to handle duplicate key (idempotent)
+            let isNewLike = false;
+            try {
+                await PostLike.create({ postId, userId });
+                isNewLike = true;
+            } catch (err: any) {
+                // Duplicate key error (11000) means already liked — no-op
+                if (err.code !== 11000) throw err;
+            }
 
-            // Notify creator
-            if (post && post.creatorId.toString() !== userId.toString()) {
+            let post;
+            if (isNewLike) {
+                post = await Post.findByIdAndUpdate(
+                    postId,
+                    { $inc: { likeCount: 1 } },
+                    { new: true }
+                );
+            } else {
+                post = await Post.findById(postId).select('likeCount creatorId');
+            }
+
+            // Notify creator (only for genuinely new likes)
+            if (isNewLike && post && post.creatorId.toString() !== userId.toString()) {
                 await NotificationService.sendNotification(
                     post.creatorId.toString(),
                     'post_liked',
@@ -455,7 +475,7 @@ export const toggleLikePost = async (req: AuthenticatedRequest, res: Response, n
 
             res.json({
                 success: true,
-                data: { liked: true },
+                data: { liked: true, likeCount: post?.likeCount ?? 0 },
             });
         }
     } catch (error) {

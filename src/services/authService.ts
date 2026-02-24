@@ -29,8 +29,8 @@ interface AuthResponse {
 
 // Check if email exists
 export const checkEmail = async (email: string): Promise<boolean> => {
-    const user = await User.findOne({ email: email.toLowerCase() });
-    return !!user;
+    const userExists = await User.exists({ email: email.toLowerCase() });
+    return !!userExists;
 };
 
 // Generate JWT tokens
@@ -61,11 +61,19 @@ const generateTokens = async (user: IUserDocument): Promise<AuthTokens> => {
     return { accessToken, refreshToken };
 };
 
-// Clean user object for response
-const sanitizeUser = (user: IUserDocument): Partial<IUserDocument> => {
-    const userObj = user.toObject();
-    const { passwordHash: _, ...sanitized } = userObj;
-    return sanitized;
+
+// Lean user object for auth responses — only fields the auth store needs
+const sanitizeUserForAuth = (user: IUserDocument): Partial<IUserDocument> => {
+    const obj = user.toObject();
+    return {
+        _id: obj._id,
+        email: obj.email,
+        role: obj.role,
+        displayName: obj.displayName,
+        username: obj.username,
+        avatarUrl: obj.avatarUrl,
+        onboardingStep: obj.onboardingStep,
+    };
 };
 
 // Signup service
@@ -112,7 +120,7 @@ export const signup = async (input: SignupInput): Promise<AuthResponse> => {
     await user.save();
 
     return {
-        user: sanitizeUser(user),
+        user: sanitizeUserForAuth(user),
         tokens,
         isNewUser: true,
     };
@@ -151,7 +159,7 @@ export const login = async (input: LoginInput): Promise<AuthResponse> => {
     await user.save();
 
     return {
-        user: sanitizeUser(user),
+        user: sanitizeUserForAuth(user),
         tokens,
         isNewUser: false,
     };
@@ -246,7 +254,7 @@ export const googleLogin = async (code: string, role: string = 'member'): Promis
     await user.save();
 
     return {
-        user: sanitizeUser(user),
+        user: sanitizeUserForAuth(user),
         tokens,
         isNewUser,
     };
@@ -266,8 +274,8 @@ export const refreshAccessToken = async (refreshToken: string): Promise<AuthToke
         throw createError.tokenExpired();
     }
 
-    // Get user
-    const user = await User.findById(tokenDoc.userId);
+    // Get minimal user required for generating tokens
+    const user = await User.findById(tokenDoc.userId).select('_id email role isActive');
 
     if (!user || !user.isActive) {
         throw createError.userNotFound();
@@ -291,10 +299,16 @@ export const logout = async (userId: string, refreshToken?: string): Promise<voi
     }
 };
 
-// Get current user profile
+// Get current user — lean auth fields only (used by /auth/me)
 export const getCurrentUser = async (userId: string): Promise<Partial<IUserDocument> | null> => {
-    const user = await User.findById(userId);
-    return user ? sanitizeUser(user) : null;
+    const user = await User.findById(userId).select('_id email role displayName username avatarUrl onboardingStep');
+    return user ? user.toObject() as Partial<IUserDocument> : null;
+};
+
+// Get full user profile (used by settings page via /auth/me/full)
+export const getFullUser = async (userId: string): Promise<Partial<IUserDocument> | null> => {
+    const user = await User.findById(userId).select('-passwordHash -__v -lastLoginAt -isActive');
+    return user ? user.toObject() as Partial<IUserDocument> : null;
 };
 
 // Change password service
@@ -347,11 +361,11 @@ export const updateOnboardingStep = async (
 
     // Only allow forward movement (prevent going back)
     if (validStep <= user.onboardingStep) {
-        return sanitizeUser(user);
+        return sanitizeUserForAuth(user);
     }
 
     user.onboardingStep = validStep;
     await user.save();
 
-    return sanitizeUser(user);
+    return sanitizeUserForAuth(user);
 };

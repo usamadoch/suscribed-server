@@ -172,6 +172,7 @@ router.post('/logout', protect, asAuthHandler(authController.logout));
  *       401:
  *         description: Not authenticated
  */
+router.get('/me/full', protect, asAuthHandler(authController.fullProfile));
 router.get('/me', protect, asAuthHandler(authController.me));
 /**
  * @swagger

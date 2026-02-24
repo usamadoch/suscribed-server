@@ -248,6 +248,36 @@ export const me = async (
     }
 };
 
+// Get full user profile controller (for settings page)
+export const fullProfile = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const userId = req.user._id.toString();
+        const user = await authService.getFullUser(userId);
+
+        if (!user) {
+            res.status(404).json({
+                success: false,
+                error: {
+                    code: 'NOT_FOUND',
+                    message: 'User not found',
+                },
+            });
+            return;
+        }
+
+        res.json({
+            success: true,
+            data: { user },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 // Change password controller
 export const changePassword = async (
     req: AuthenticatedRequest,

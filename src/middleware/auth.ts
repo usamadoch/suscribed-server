@@ -32,8 +32,8 @@ export const protect = async (
         const decoded = jwt.verify(token, config.jwt.accessSecret) as JWTPayload;
 
         console.log('[Auth] Token verified, fetching user:', decoded.userId);
-        // Get user from database
-        const user = await User.findById(decoded.userId).select('-passwordHash');
+        // Get user from database with minimal fields needed for validation
+        const user = await User.findById(decoded.userId).select('_id isActive role displayName username avatarUrl email onboardingStep');
 
         if (!user) {
             console.log('[Auth] User not found in DB');
@@ -80,7 +80,7 @@ export const optionalAuth = async (
         }
 
         const decoded = jwt.verify(token, config.jwt.accessSecret) as JWTPayload;
-        const user = await User.findById(decoded.userId).select('-passwordHash');
+        const user = await User.findById(decoded.userId).select('_id isActive role displayName username avatarUrl email onboardingStep');
 
         if (user && user.isActive) {
             req.user = user;

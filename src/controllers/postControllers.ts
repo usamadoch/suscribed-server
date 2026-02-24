@@ -178,36 +178,33 @@ export const getPostById = async (req: MaybeAuthenticatedRequest, res: Response,
         // Check membership for member-only posts
         let isMember = false;
         if (post.visibility === 'members' && !isOwner && req.user) {
-            const membership = await Membership.findOne({
+            const hasMembership = await Membership.exists({
                 memberId: req.user._id,
                 creatorId: creatorId,
                 status: 'active',
             });
-            isMember = !!membership;
+            isMember = !!hasMembership;
         }
 
         const ctx: AccessContext = { userId, isOwner, isMember };
 
         // Track view (always, even for locked posts)
         const sessionId = req.cookies?.sessionId || req.ip || 'anonymous';
-        await PostView.updateOne(
-            { postId: post._id, sessionId },
-            {
-                $set: { viewedAt: new Date() },
-                $setOnInsert: { userId: req.user?._id || null },
-            },
-            { upsert: true }
-        );
 
-        // Increment view count
-        await Post.updateOne({ _id: post._id }, { $inc: { viewCount: 1 } });
+        const [_, __, likeExists] = await Promise.all([
+            PostView.updateOne(
+                { postId: post._id, sessionId },
+                {
+                    $set: { viewedAt: new Date() },
+                    $setOnInsert: { userId: req.user?._id || null },
+                },
+                { upsert: true }
+            ),
+            Post.updateOne({ _id: post._id }, { $inc: { viewCount: 1 } }),
+            req.user ? PostLike.exists({ postId: post._id, userId: req.user._id }) : Promise.resolve(null)
+        ]);
 
-        // Check if user liked the post
-        let isLiked = false;
-        if (req.user) {
-            const like = await PostLike.findOne({ postId: post._id, userId: req.user._id });
-            isLiked = !!like;
-        }
+        const isLiked = !!likeExists;
 
         // Sanitize the post based on access
         const sanitizedPost = sanitizePostForClient(post, ctx);
@@ -227,7 +224,7 @@ export const getPostById = async (req: MaybeAuthenticatedRequest, res: Response,
 // Create post (creator only)
 export const createPost = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const creatorPage = await CreatorPage.findOne({ userId: req.user._id });
+        const creatorPage = await CreatorPage.findOne({ userId: req.user._id }).select('_id displayName');
 
         if (!creatorPage) {
             res.status(404).json({
@@ -352,7 +349,7 @@ export const updatePost = async (req: AuthenticatedRequest, res: Response, next:
         // If publishing for first time
         if (!wasPublished && post.status === 'published') {
             post.publishedAt = new Date();
-            const page = await CreatorPage.findById(post.pageId);
+            const page = await CreatorPage.findById(post.pageId).select('_id displayName');
             if (page) {
                 await CreatorPage.updateOne({ _id: page._id }, { $inc: { postCount: 1 } });
 
@@ -444,7 +441,7 @@ export const toggleLikePost = async (req: AuthenticatedRequest, res: Response, n
         const postId = req.params.id;
         const userId = req.user._id;
 
-        const existingLike = await PostLike.findOne({ postId, userId });
+        const existingLike = await PostLike.exists({ postId, userId });
 
         if (existingLike) {
             // Unlike — only decrement if we actually deleted a record
@@ -515,7 +512,7 @@ export const getPostComments = async (req: MaybeAuthenticatedRequest, res: Respo
     try {
         const { page = 1, limit = 20 } = req.query;
 
-        const post = await Post.findById(req.params.id);
+        const post = await Post.findById(req.params.id).select('visibility status creatorId');
 
         if (!post) {
             res.status(404).json({
@@ -564,21 +561,6 @@ export const getPostComments = async (req: MaybeAuthenticatedRequest, res: Respo
             .skip((Number(page) - 1) * Number(limit))
             .limit(Number(limit));
 
-        // Get replies for each comment
-        const commentsWithReplies = await Promise.all(
-            comments.map(async (comment) => {
-                const replies = await Comment.find({
-                    parentId: comment._id,
-                    isHidden: false,
-                })
-                    .populate('authorId', 'displayName username avatarUrl')
-                    .sort({ createdAt: 1 })
-                    .limit(3);
-
-                return { ...comment.toObject(), replies };
-            })
-        );
-
         const total = await Comment.countDocuments({
             postId: req.params.id,
             parentId: null,
@@ -587,7 +569,7 @@ export const getPostComments = async (req: MaybeAuthenticatedRequest, res: Respo
 
         res.json({
             success: true,
-            data: { comments: commentsWithReplies },
+            data: { comments },
             meta: {
                 pagination: {
                     page: Number(page),
@@ -692,7 +674,7 @@ export const getRecentVideos = async (req: MaybeAuthenticatedRequest, res: Respo
             return;
         }
 
-        const creatorPage = await CreatorPage.findOne({ pageSlug: String(pageSlug).toLowerCase() });
+        const creatorPage = await CreatorPage.findOne({ pageSlug: String(pageSlug).toLowerCase() }).select('_id');
         if (!creatorPage) {
             res.status(404).json({
                 success: false,

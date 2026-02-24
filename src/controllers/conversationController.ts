@@ -70,7 +70,7 @@ export const createConversation = async (req: AuthenticatedRequest, res: Respons
                 { memberId: userId, creatorId: recipientId, status: 'active' },
                 { memberId: recipientId, creatorId: userId, status: 'active' },
             ],
-        });
+        }).select('creatorId memberId');
 
         if (!membership) {
             res.status(403).json({
@@ -107,12 +107,12 @@ export const getConversationMessages = async (req: AuthenticatedRequest, res: Re
         const userId = req.user._id;
 
         // Verify user is participant
-        const conversation = await Conversation.findOne({
+        const conversationExists = await Conversation.exists({
             _id: req.params.id,
             participants: userId,
         });
 
-        if (!conversation) {
+        if (!conversationExists) {
             res.status(404).json({
                 success: false,
                 error: { code: 'NOT_FOUND', message: 'Conversation not found' },
@@ -179,7 +179,7 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
         const conversation = await Conversation.findOne({
             _id: conversationId,
             participants: userId,
-        });
+        }).select('participants');
 
         if (!conversation) {
             res.status(404).json({
@@ -248,12 +248,12 @@ export const markMessageAsRead = async (req: AuthenticatedRequest, res: Response
         const userId = req.user._id;
 
         // Verify user is participant in conversation
-        const conversation = await Conversation.findOne({
+        const conversationExists = await Conversation.exists({
             _id: req.params.conversationId,
             participants: userId,
         });
 
-        if (!conversation) {
+        if (!conversationExists) {
             res.status(404).json({
                 success: false,
                 error: { code: 'NOT_FOUND', message: 'Conversation not found' },

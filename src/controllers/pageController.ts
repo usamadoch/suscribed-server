@@ -9,7 +9,7 @@ import Membership from '../models/Membership.js';
 export const getPublicPages = async (_req: Request, res: Response, next: NextFunction) => {
     try {
         const pages = await CreatorPage.find({ isPublic: true, status: 'published' })
-            .select('pageSlug displayName tagline avatarUrl bannerUrl memberCount postCount theme')
+            .select('pageSlug displayName tagline avatarUrl memberCount postCount')
             .sort({ memberCount: -1, createdAt: -1 })
             .limit(50);
 
@@ -105,12 +105,12 @@ export const getPageBySlug = async (req: MaybeAuthenticatedRequest, res: Respons
             isOwner = page.userId._id.toString() === req.user._id.toString();
 
             if (!isOwner) {
-                const membership = await Membership.findOne({
+                const membershipExists = await Membership.exists({
                     memberId: req.user._id,
                     creatorId: page.userId._id,
                     status: 'active',
                 });
-                isMember = !!membership;
+                isMember = !!membershipExists;
             }
         }
 
@@ -178,12 +178,12 @@ export const getPagePosts = async (req: MaybeAuthenticatedRequest, res: Response
             isOwner = page.userId.toString() === req.user._id.toString();
 
             if (!isOwner) {
-                const membership = await Membership.findOne({
+                const membershipExists = await Membership.exists({
                     memberId: req.user._id,
                     pageId: page._id,
                     status: 'active',
                 });
-                isMember = !!membership;
+                isMember = !!membershipExists;
             }
         }
 

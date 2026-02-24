@@ -143,28 +143,38 @@ export const errorHandler = (
     _next: NextFunction
 ): void => {
     // Log error with correlation ID
+    const isAppError = err instanceof AppError;
+    const statusCode = isAppError ? err.statusCode : 500;
+    const code = isAppError ? err.code : ErrorCodes.SERVER_ERROR;
+
     const logData = {
+        errorLog: {
+            correlationId: req.correlationId,
+            method: req.method,
+            path: req.originalUrl || req.path,
+            error: err.message,
+            stack: err.stack,
+            statusCode,
+            code,
+            isOperational: isAppError && err.isOperational,
+        },
+        // Production-friendly flat fields for JSON format
         correlationId: req.correlationId,
         method: req.method,
-        path: req.path,
+        path: req.originalUrl || req.path,
         error: err.message,
         stack: err.stack,
+        statusCode,
+        code,
     };
 
-    // Determine if this is an operational error (expected) or programming error
-    const isAppError = err instanceof AppError;
-
     if (isAppError && err.isOperational) {
-        // Operational error - log as warning
         logger.warn('Operational error', logData);
     } else {
-        // Programming error - log as error
         logger.error('Unexpected error', logData);
     }
 
     // Build response
-    const statusCode = isAppError ? err.statusCode : 500;
-    const code = isAppError ? err.code : ErrorCodes.SERVER_ERROR;
     const message = isAppError ? err.message : 'An unexpected error occurred';
 
     const response: ErrorResponse = {

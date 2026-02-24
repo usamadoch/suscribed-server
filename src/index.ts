@@ -43,6 +43,8 @@ import seedRoutes from './routes/seedRoutes.js';
 
 // Import socket handlers
 import { initializeSockets } from './sockets/index.js';
+import { closeQueues, initializeQueues } from 'jobs/queues.js';
+import { startNotificationWorker, stopNotificationWorker } from 'jobs/workers/notificationWorker.js';
 
 
 
@@ -222,10 +224,10 @@ const gracefulShutdown = async (signal: string): Promise<void> => {
 
     try {
         // Stop background workers
-        // await stopNotificationWorker();
+        await stopNotificationWorker();
 
         // Close job queues
-        // await closeQueues();
+        await closeQueues();
 
         // Close Redis connections
         await closeRedisConnections();
@@ -280,10 +282,10 @@ const startServer = async (): Promise<void> => {
         }
 
         // Initialize BullMQ queues
-        // initializeQueues();
+        initializeQueues();
 
         // Start background workers
-        // startNotificationWorker(io);
+        startNotificationWorker(io);
 
         // Start HTTP server
         httpServer.listen(config.port, () => {

@@ -3,20 +3,30 @@ import { protect, optionalAuth, requireCreator } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { createPostSchema, updatePostSchema, createCommentSchema } from '../utils/validators.js';
 import {
-    getPosts,
+    getMyPosts,
+    getCreatorPosts,
     getPostById,
     createPost,
     updatePost,
     deletePost,
     toggleLikePost,
     getPostComments,
-    addPostComment
+    addPostComment,
+    getRecentVideos
 } from '../controllers/postControllers.js';
 
 const router = Router();
 
-// Get posts (with filters)
-router.get('/', optionalAuth, getPosts as RequestHandler);
+// Creator dashboard: my own posts (paginated, lean)
+router.get('/my', protect, requireCreator, getMyPosts as RequestHandler);
+
+// Public: creator's posts by slug (lean, with access control)
+router.get('/creator', optionalAuth, getCreatorPosts as RequestHandler);
+
+
+
+// Get recent videos
+router.get('/recent-videos', optionalAuth, getRecentVideos as RequestHandler);
 
 // Get single post
 router.get('/:id', optionalAuth, getPostById as RequestHandler);

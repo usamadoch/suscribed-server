@@ -11,23 +11,77 @@ import { cloudinaryService } from '../services/media/cloudinaryService.js';
 import { muxService } from '../services/media/muxService.js';
 import { sanitizePostForClient, sanitizePostsForClient, AccessContext } from '../utils/postAccessControl.js';
 
-// Get posts (with filters)
-export const getPosts = async (req: MaybeAuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+
+// Get creator's own posts (dashboard — lean projection, no sanitization needed)
+export const getMyPosts = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const {
-            creatorId,
-            pageSlug,
-            status = 'published',
-            page = 1,
-            limit = 10,
-            type,
-        } = req.query;
+        const { page = 1, limit = 10 } = req.query;
 
-        const query: Record<string, unknown> = { status };
-
-        if (creatorId) {
-            query.creatorId = creatorId;
+        const creatorPage = await CreatorPage.findOne({ userId: req.user._id }).select('_id');
+        if (!creatorPage) {
+            res.status(404).json({
+                success: false,
+                error: { code: 'NOT_FOUND', message: 'Creator page not found' },
+            });
+            return;
         }
+
+        const query = { pageId: creatorPage._id, status: 'published' as const };
+
+        const posts = await Post.find(query)
+            .select('_id caption postType mediaAttachments.type mediaAttachments.url viewCount likeCount commentCount visibility publishedAt createdAt')
+            .sort({ isPinned: -1, createdAt: -1 })
+            .skip((Number(page) - 1) * Number(limit))
+            .limit(Number(limit))
+            .lean();
+
+        const total = await Post.countDocuments(query);
+
+        res.json({
+            success: true,
+            data: { posts },
+            meta: {
+                pagination: {
+                    page: Number(page),
+                    limit: Number(limit),
+                    totalItems: total,
+                    totalPages: Math.ceil(total / Number(limit)),
+                    hasNextPage: Number(page) * Number(limit) < total,
+                    hasPrevPage: Number(page) > 1,
+                },
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Get creator's posts for public page (with access control + lean projection)
+export const getCreatorPosts = async (req: MaybeAuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { pageSlug, limit = 100, type } = req.query;
+
+        if (!pageSlug) {
+            res.status(400).json({
+                success: false,
+                error: { code: 'BAD_REQUEST', message: 'pageSlug is required' },
+            });
+            return;
+        }
+
+        const creatorPage = await CreatorPage.findOne({ pageSlug: String(pageSlug).toLowerCase() }).select('_id');
+        if (!creatorPage) {
+            res.status(404).json({
+                success: false,
+                error: { code: 'NOT_FOUND', message: 'Creator page not found' },
+            });
+            return;
+        }
+
+        const query: Record<string, unknown> = {
+            pageId: creatorPage._id,
+            status: 'published',
+        };
 
         if (type) {
             const types = String(type).split(',');
@@ -38,31 +92,16 @@ export const getPosts = async (req: MaybeAuthenticatedRequest, res: Response, ne
             }
         }
 
-        let targetPageId: string | null = null;
-        if (pageSlug) {
-            const creatorPage = await CreatorPage.findOne({ pageSlug: String(pageSlug).toLowerCase() });
-            if (creatorPage) {
-                query.pageId = creatorPage._id;
-                targetPageId = creatorPage._id.toString();
-            }
-        }
-
-        // Fetch posts (don't filter by visibility here - we'll sanitize based on access)
         const posts = await Post.find(query)
-            .populate('creatorId', 'displayName username avatarUrl')
-            .populate('pageId', 'pageSlug displayName avatarUrl')
+            .select('_id caption postType visibility viewCount likeCount commentCount creatorId createdAt isPinned mediaAttachments.type mediaAttachments.url mediaAttachments.thumbnailUrl mediaAttachments.duration mediaAttachments.cloudinaryPublicId mediaAttachments.muxPlaybackId mediaAttachments.filename mediaAttachments.fileSize mediaAttachments.mimeType mediaAttachments.dimensions mediaAttachments.status')
             .sort({ isPinned: -1, createdAt: -1 })
-            .skip((Number(page) - 1) * Number(limit))
             .limit(Number(limit));
 
-        const total = await Post.countDocuments(query);
-
-        // Build membership map for efficient access checking
+        // Build membership map for access checking
         const membershipMap = new Map<string, boolean>();
         const likedPostIds = new Set<string>();
 
         if (req.user) {
-            // Get unique creator IDs from the posts
             const creatorIds = [...new Set(posts.map(p => {
                 const cId = p.creatorId;
                 return typeof cId === 'object' && cId._id
@@ -70,7 +109,6 @@ export const getPosts = async (req: MaybeAuthenticatedRequest, res: Response, ne
                     : cId.toString();
             }))];
 
-            // Batch check memberships
             const memberships = await Membership.find({
                 memberId: req.user._id,
                 creatorId: { $in: creatorIds },
@@ -81,7 +119,6 @@ export const getPosts = async (req: MaybeAuthenticatedRequest, res: Response, ne
                 membershipMap.set(m.creatorId.toString(), true);
             });
 
-            // Batch check likes
             const likes = await PostLike.find({
                 userId: req.user._id,
                 postId: { $in: posts.map(p => p._id) }
@@ -92,7 +129,7 @@ export const getPosts = async (req: MaybeAuthenticatedRequest, res: Response, ne
             });
         }
 
-        // Sanitize all posts based on access
+        // Sanitize posts based on access
         const sanitizedPosts = sanitizePostsForClient(
             posts,
             req.user?._id?.toString() || null,
@@ -108,16 +145,6 @@ export const getPosts = async (req: MaybeAuthenticatedRequest, res: Response, ne
         res.json({
             success: true,
             data: { posts: postsWithLikes },
-            meta: {
-                pagination: {
-                    page: Number(page),
-                    limit: Number(limit),
-                    totalItems: total,
-                    totalPages: Math.ceil(total / Number(limit)),
-                    hasNextPage: Number(page) * Number(limit) < total,
-                    hasPrevPage: Number(page) > 1,
-                },
-            },
         });
     } catch (error) {
         next(error);
@@ -646,6 +673,49 @@ export const addPostComment = async (req: AuthenticatedRequest, res: Response, n
         res.status(201).json({
             success: true,
             data: { comment },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Get recent videos for a creator page
+export const getRecentVideos = async (req: MaybeAuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { pageSlug, limit = 5 } = req.query;
+
+        if (!pageSlug) {
+            res.status(400).json({
+                success: false,
+                error: { code: 'BAD_REQUEST', message: 'pageSlug is required' },
+            });
+            return;
+        }
+
+        const creatorPage = await CreatorPage.findOne({ pageSlug: String(pageSlug).toLowerCase() });
+        if (!creatorPage) {
+            res.status(404).json({
+                success: false,
+                error: { code: 'NOT_FOUND', message: 'Creator page not found' },
+            });
+            return;
+        }
+
+        const query = {
+            pageId: creatorPage._id,
+            postType: 'video',
+            status: 'published'
+        };
+
+        // Fetch only required fields, excluding sensitive video URLs
+        const posts = await Post.find(query)
+            .select('caption teaser mediaAttachments.thumbnailUrl mediaAttachments.duration mediaAttachments.type publishedAt createdAt _id')
+            .sort({ publishedAt: -1, createdAt: -1 })
+            .limit(Number(limit));
+
+        res.json({
+            success: true,
+            data: { posts },
         });
     } catch (error) {
         next(error);

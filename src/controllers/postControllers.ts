@@ -212,7 +212,7 @@ export const getPostById = async (req: MaybeAuthenticatedRequest, res: Response,
         res.json({
             success: true,
             data: {
-                post: { ...sanitizedPost, viewCount: (post.viewCount || 0) + 1 },
+                post: { ...sanitizedPost, viewCount: (post.viewCount || 0) + 1, isLiked },
                 isLiked,
             },
         });

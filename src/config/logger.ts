@@ -1,6 +1,7 @@
 import winston from 'winston';
 import { v4 as uuidv4 } from 'uuid';
 import { Request, Response, NextFunction } from 'express';
+import http from 'http';
 import config from './index.js';
 import type { IUser } from '../types/index.js';
 
@@ -170,8 +171,10 @@ function formatRequestBox(log: RequestLogData, timestamp: string): string {
         ? `${shortId(log.userId)} (${log.username})`
         : 'anonymous';
 
-    // Line 1: method + path + status + duration
-    const line1 = `${ANSI.dim}┌${ANSI.reset} ${tag}${mColor}${ANSI.bold}${log.method}${ANSI.reset} ${ANSI.white}${log.path}${ANSI.reset} ${ANSI.dim}──${ANSI.reset} ${color}${ANSI.bold}${log.statusCode}${ANSI.reset} ${icon} ${ANSI.dim}──${ANSI.reset} ${durationStr}`;
+    const statusPhrase = http.STATUS_CODES[log.statusCode] || 'Unknown';
+
+    // Line 1: method + path + status + phrase + duration
+    const line1 = `${ANSI.dim}┌${ANSI.reset} ${tag}${mColor}${ANSI.bold}${log.method}${ANSI.reset} ${ANSI.white}${log.path}${ANSI.reset} ${ANSI.dim}──${ANSI.reset} ${color}${ANSI.bold}${log.statusCode} ${statusPhrase}${ANSI.reset} ${icon} ${ANSI.dim}──${ANSI.reset} ${durationStr}`;
     // Line 2: user + ip + reqId + timestamp
     const line2 = `${ANSI.dim}│${ANSI.reset}  ${ANSI.dim}${timestamp}${ANSI.reset} · ${userStr} · ${ANSI.dim}${log.ip}${ANSI.reset} · ${ANSI.dim}${shortId(log.correlationId)}${ANSI.reset}`;
     // Line 3: separator
@@ -190,8 +193,10 @@ function formatErrorBlock(err: ErrorLogData, timestamp: string, level: string): 
 
     // Line 1: badge + method + path + error message
     const line1 = `${badge} ${mColor}${ANSI.bold}${err.method}${ANSI.reset} ${ANSI.white}${err.path}${ANSI.reset} ${ANSI.dim}──${ANSI.reset} ${color}${err.error}${ANSI.reset}`;
-    // Line 2: timestamp + status + reqId
-    const line2 = `  ${ANSI.dim}${timestamp} · ${err.statusCode} · ${shortId(err.correlationId)}${ANSI.reset}`;
+
+    const statusPhrase = http.STATUS_CODES[err.statusCode] || 'Unknown';
+    // Line 2: timestamp + status + phrase + reqId
+    const line2 = `  ${ANSI.dim}${timestamp} · ${err.statusCode} ${statusPhrase} · ${shortId(err.correlationId)}${ANSI.reset}`;
 
     return `${line1}\n${line2}`;
 }

@@ -39,8 +39,8 @@ import userRoutes from './routes/user.js';
 import notificationRoutes from './routes/notification.js';
 import analyticsRoutes from './routes/analytics.js';
 import seedRoutes from './routes/seedRoutes.js';
-
-
+import payoutRoutes from './routes/payout.js';
+import adminRoutes from './routes/admin.js';
 // Import socket handlers
 import { initializeSockets } from './sockets/index.js';
 import { closeQueues, initializeQueues } from 'jobs/queues.js';
@@ -180,9 +180,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/seed', seedRoutes);
-
-
-
+app.use('/api/payouts', payoutRoutes);
+app.use('/api/admin', adminRoutes);
 
 
 // 404 handler

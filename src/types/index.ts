@@ -242,6 +242,65 @@ export interface IMembership {
     totalVisits: number;
 }
 
+// Payout Method
+export type PayoutStatus = 'pending_review' | 'approved' | 'rejected';
+
+export interface IPayoutMethod {
+    _id: Types.ObjectId;
+    userId: Types.ObjectId;
+    pageId: Types.ObjectId;
+    accountHolderName: string;
+    bankName: string;
+    accountNumber: string;
+    routingNumber: string;
+    country: string;
+    notes?: string;
+    status: PayoutStatus;
+    rejectionReason?: string;
+    reviewedBy?: Types.ObjectId;
+    reviewedAt?: Date;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+// Membership Plan
+export type MembershipPlanStatus = 'draft' | 'published';
+
+export interface IMembershipPlan {
+    _id: Types.ObjectId;
+    creatorId: Types.ObjectId;
+    pageId: Types.ObjectId;
+    name: string;
+    price: number;
+    description: string;
+    benefits: string[];
+    badgeTitle?: string;
+    status: MembershipPlanStatus;
+    activeSubscribers: number;
+    stripeProductId?: string;
+    stripePriceId?: string;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
+// Subscription
+export type SubscriptionStatus = 'active' | 'past_due' | 'canceled' | 'incomplete';
+
+export interface ISubscription {
+    _id: Types.ObjectId;
+    userId: Types.ObjectId;
+    creatorId: Types.ObjectId;
+    planId: Types.ObjectId;
+    status: SubscriptionStatus;
+    currentPeriodStart?: Date;
+    currentPeriodEnd?: Date;
+    canceledAt?: Date;
+    stripeSubscriptionId?: string;
+    stripeCustomerId?: string;
+    createdAt: Date;
+    updatedAt: Date;
+}
+
 // Messages
 export interface MessageAttachment {
     type: 'image' | 'file';

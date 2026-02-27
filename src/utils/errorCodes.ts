@@ -75,7 +75,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
     [ErrorCodes.USER_NOT_FOUND]: 'User not found',
     [ErrorCodes.POST_NOT_FOUND]: 'Post not found',
     [ErrorCodes.PAGE_NOT_FOUND]: 'Creator page not found',
-    [ErrorCodes.MEMBERSHIP_NOT_FOUND]: 'Membership not found',
+    [ErrorCodes.MEMBERSHIP_NOT_FOUND]: 'Member not found',
     [ErrorCodes.CONVERSATION_NOT_FOUND]: 'Conversation not found',
     [ErrorCodes.MESSAGE_NOT_FOUND]: 'Message not found',
     [ErrorCodes.NOTIFICATION_NOT_FOUND]: 'Notification not found',

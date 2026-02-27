@@ -15,9 +15,38 @@ const payoutMethodSchema = new Schema<IPayoutMethodDocument>(
             ref: 'CreatorPage',
             required: true,
         },
-        accountHolderName: {
+        firstName: {
             type: String,
-            required: [true, 'Account holder name is required'],
+            required: [true, 'First name is required'],
+            trim: true,
+        },
+        lastName: {
+            type: String,
+            required: [true, 'Last name is required'],
+            trim: true,
+        },
+        dateOfBirth: {
+            type: String,
+            required: [true, 'Date of birth is required'],
+        },
+        address1: {
+            type: String,
+            required: [true, 'Address line 1 is required'],
+            trim: true,
+        },
+        address2: {
+            type: String,
+            trim: true,
+            default: '',
+        },
+        city: {
+            type: String,
+            required: [true, 'City is required'],
+            trim: true,
+        },
+        postalCode: {
+            type: String,
+            required: [true, 'Postal code is required'],
             trim: true,
         },
         bankName: {
@@ -25,28 +54,25 @@ const payoutMethodSchema = new Schema<IPayoutMethodDocument>(
             required: [true, 'Bank name is required'],
             trim: true,
         },
-        accountNumber: {
+        accountHolderName: {
             type: String,
-            required: [true, 'Account number is required'],
+            required: [true, 'Account holder name is required'],
             trim: true,
         },
-        routingNumber: {
+        iban: {
             type: String,
-            required: [true, 'Routing number is required'],
+            required: [true, 'IBAN is required'],
             trim: true,
         },
-        country: {
+        idType: {
             type: String,
-            required: [true, 'Country is required'],
-            trim: true,
-            uppercase: true,
-            minlength: 2,
-            maxlength: 2,
+            enum: ['id_card', 'driving_license', 'passport'],
+            required: [true, 'ID type is required'],
         },
-        notes: {
+        idNumber: {
             type: String,
-            default: '',
-            maxlength: 500,
+            required: [true, 'ID number is required'],
+            trim: true,
         },
         status: {
             type: String,

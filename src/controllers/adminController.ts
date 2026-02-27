@@ -7,7 +7,8 @@ export const getPendingPayouts = async (req: AuthenticatedRequest, res: Response
         const payouts = await PayoutMethod.find({ status: 'pending_review' })
             .populate('userId', 'displayName email')
             .populate('pageId', 'pageSlug displayName')
-            .sort({ createdAt: 1 });
+            .sort({ createdAt: 1 })
+            .lean();
 
         res.json({
             success: true,
@@ -33,23 +34,23 @@ export const reviewPayout = async (req: AuthenticatedRequest, res: Response, nex
             return;
         }
 
-        const payoutMethod = await PayoutMethod.findById(id);
+        const updateData: any = {
+            status,
+            rejectionReason: status === 'rejected' ? rejectionReason : '',
+            reviewedBy: req.user._id,
+            reviewedAt: new Date(),
+        };
+
+        const payoutMethod = await PayoutMethod.findByIdAndUpdate(
+            id,
+            { $set: updateData },
+            { new: true }
+        ).lean();
+
         if (!payoutMethod) {
             res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Payout method not found' } });
             return;
         }
-
-        payoutMethod.status = status;
-        if (status === 'rejected') {
-            payoutMethod.rejectionReason = rejectionReason;
-        } else {
-            payoutMethod.rejectionReason = '';
-        }
-
-        payoutMethod.reviewedBy = req.user._id;
-        payoutMethod.reviewedAt = new Date();
-
-        await payoutMethod.save();
 
         res.json({
             success: true,

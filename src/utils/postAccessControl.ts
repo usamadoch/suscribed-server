@@ -127,7 +127,7 @@ export function hasAccessToPost(
     // Public posts are accessible to everyone
     if (post.visibility === 'public') return true;
 
-    // Members-only posts require active membership
+    // Members-only posts require active member
     if (post.visibility === 'members' && ctx.isMember) return true;
 
     return false;
@@ -266,11 +266,11 @@ export function sanitizePostForClient(
 // ============================================================================
 
 /**
- * Sanitizes multiple posts with a membership lookup map for efficiency.
+ * Sanitizes multiple posts with a member lookup map for efficiency.
  * 
  * @param posts - Array of posts to sanitize
  * @param userId - Current user's ID (or null if unauthenticated)
- * @param membershipMap - Map of creatorId -> boolean (has active membership)
+ * @param membershipMap - Map of creatorId -> boolean (has active member)
  * @returns Array of sanitized posts
  */
 export function sanitizePostsForClient(

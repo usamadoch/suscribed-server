@@ -29,7 +29,7 @@ import swaggerSpec from './config/swagger.js';
 import authRoutes from './routes/auth.js';
 import pageRoutes from './routes/page.js';
 
-import membershipRoutes from './routes/membership.js';
+import membershipRoutes from './routes/member.js';
 import postRoutes from './routes/post.js';
 import conversationRoutes from './routes/conversation.js';
 import errorHandler from './middleware/errorHandler.js';
@@ -41,6 +41,7 @@ import analyticsRoutes from './routes/analytics.js';
 import seedRoutes from './routes/seedRoutes.js';
 import payoutRoutes from './routes/payout.js';
 import adminRoutes from './routes/admin.js';
+import membershipPlanRoutes from './routes/tier.js';
 // Import socket handlers
 import { initializeSockets } from './sockets/index.js';
 import { closeQueues, initializeQueues } from 'jobs/queues.js';
@@ -173,7 +174,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/pages', pageRoutes);
 
 app.use('/api/media', mediaRoutes); // New media pipeline
-app.use('/api/memberships', membershipRoutes);
+app.use('/api/members', membershipRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/users', userRoutes);
@@ -182,6 +183,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/seed', seedRoutes);
 app.use('/api/payouts', payoutRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/tiers', membershipPlanRoutes);
 
 
 // 404 handler

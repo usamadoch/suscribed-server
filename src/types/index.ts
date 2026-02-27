@@ -227,14 +227,15 @@ export interface LockedPostResponse extends Omit<IPost, '_id' | 'creatorId' | 'p
  */
 export type SanitizedPostResponse = UnlockedPostResponse | LockedPostResponse;
 
-// Membership
+// Member
 export type MembershipStatus = 'active' | 'paused' | 'cancelled';
 
-export interface IMembership {
+export interface IMember {
     _id: Types.ObjectId;
     memberId: Types.ObjectId;
     creatorId: Types.ObjectId;
     pageId: Types.ObjectId;
+    tier?: string;
     status: MembershipStatus;
     joinedAt: Date;
     cancelledAt: Date | null;
@@ -244,17 +245,27 @@ export interface IMembership {
 
 // Payout Method
 export type PayoutStatus = 'pending_review' | 'approved' | 'rejected';
+export type IdType = 'id_card' | 'driving_license' | 'passport';
 
 export interface IPayoutMethod {
     _id: Types.ObjectId;
     userId: Types.ObjectId;
     pageId: Types.ObjectId;
-    accountHolderName: string;
+
+    firstName: string;
+    lastName: string;
+    dateOfBirth: string;
+    address1: string;
+    address2?: string;
+    city: string;
+    postalCode: string;
+
     bankName: string;
-    accountNumber: string;
-    routingNumber: string;
-    country: string;
-    notes?: string;
+    accountHolderName: string;
+    iban: string;
+    idType: IdType;
+    idNumber: string;
+
     status: PayoutStatus;
     rejectionReason?: string;
     reviewedBy?: Types.ObjectId;
@@ -263,10 +274,10 @@ export interface IPayoutMethod {
     updatedAt: Date;
 }
 
-// Membership Plan
-export type MembershipPlanStatus = 'draft' | 'published';
+// Member Plan
+export type TierStatus = 'draft' | 'published';
 
-export interface IMembershipPlan {
+export interface ITier {
     _id: Types.ObjectId;
     creatorId: Types.ObjectId;
     pageId: Types.ObjectId;
@@ -275,7 +286,7 @@ export interface IMembershipPlan {
     description: string;
     benefits: string[];
     badgeTitle?: string;
-    status: MembershipPlanStatus;
+    status: TierStatus;
     activeSubscribers: number;
     stripeProductId?: string;
     stripePriceId?: string;
@@ -466,3 +477,24 @@ export interface UploadedFile {
 
 
 export * from './analytics.js';
+
+// Transaction types
+export type TransactionStatus = 'pending' | 'available' | 'refunded' | 'paid';
+export type TransactionType = 'subscription' | 'refund';
+
+export interface ITransaction {
+    _id: Types.ObjectId;
+    userId: Types.ObjectId;
+    creatorId: Types.ObjectId;
+    pageId: Types.ObjectId;
+    type: TransactionType;
+    gross: number;
+    platformFee: number;
+    net: number;
+    status: TransactionStatus;
+    releaseAt: Date;
+    payoutId?: Types.ObjectId;
+    description?: string;
+    createdAt: Date;
+    updatedAt: Date;
+}

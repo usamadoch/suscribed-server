@@ -1,13 +1,13 @@
 import { jest } from '@jest/globals';
 import { createError } from '../../middleware/errorHandler';
 // Import types for mocking
-import { IMembershipDocument } from '../../models/Membership';
+import { IMemberDocument } from '../../models/Member';
 import { ICreatorPageDocument } from '../../models/CreatorPage';
 
 // Define mocks using unstable_mockModule which works with ESM
 // These must be defined BEFORE importing the modules under test
 
-jest.unstable_mockModule('../../models/Membership', () => ({
+jest.unstable_mockModule('../../models/Member', () => ({
     __esModule: true,
     default: {
         findOne: jest.fn(),
@@ -41,12 +41,12 @@ type MockModel<T> = {
 
 // Dynamic imports variables
 // Use strict types for mocked modules
-let MembershipService: any; // We can't easily type the service class itself without importing it, but that's fine as we test its methods
-let Membership: MockModel<IMembershipDocument>;
+let MemberService: any; // We can't easily type the service class itself without importing it, but that's fine as we test its methods
+let Member: MockModel<IMemberDocument>;
 let CreatorPage: Pick<MockModel<ICreatorPageDocument>, 'findById' | 'updateOne'>;
 let NotificationService: { sendNotification: jest.Mock };
 
-describe('MembershipService', () => {
+describe('MemberService', () => {
     const mockMemberId = 'member123';
     const mockCreatorId = 'creator456';
     const mockPageId = 'page789';
@@ -55,11 +55,11 @@ describe('MembershipService', () => {
     const mockIo = { to: jest.fn().mockReturnThis(), emit: jest.fn() };
 
     beforeAll(async () => {
-        const membershipServiceModule = await import('../membershipService');
-        MembershipService = membershipServiceModule.MembershipService;
+        const memberServiceModule = await import('../memberService');
+        MemberService = memberServiceModule.MemberService;
 
-        const membershipModule = await import('../../models/Membership');
-        Membership = membershipModule.default as unknown as MockModel<IMembershipDocument>;
+        const membershipModule = await import('../../models/Member');
+        Member = membershipModule.default as unknown as MockModel<IMemberDocument>;
 
         const creatorPageModule = await import('../../models/CreatorPage');
         CreatorPage = creatorPageModule.default as unknown as MockModel<ICreatorPageDocument>;
@@ -76,7 +76,7 @@ describe('MembershipService', () => {
         it('should throw error if page does not exist', async () => {
             CreatorPage.findById.mockResolvedValue(null);
 
-            await expect(MembershipService.joinCreator({
+            await expect(MemberService.joinCreator({
                 memberId: mockMemberId,
                 creatorId: mockCreatorId,
                 pageId: mockPageId,
@@ -86,9 +86,9 @@ describe('MembershipService', () => {
 
         it('should throw error if already an active member', async () => {
             CreatorPage.findById.mockResolvedValue({ _id: mockPageId } as unknown as ICreatorPageDocument);
-            Membership.findOne.mockResolvedValue({ status: 'active' } as unknown as IMembershipDocument);
+            Member.findOne.mockResolvedValue({ status: 'active' } as unknown as IMemberDocument);
 
-            await expect(MembershipService.joinCreator({
+            await expect(MemberService.joinCreator({
                 memberId: mockMemberId,
                 creatorId: mockCreatorId,
                 pageId: mockPageId,
@@ -96,19 +96,19 @@ describe('MembershipService', () => {
             })).rejects.toEqual(createError.conflict('Already a member'));
         });
 
-        it('should reactivate membership if status is cancelled', async () => {
+        it('should reactivate member if status is cancelled', async () => {
             const mockMembership = {
                 status: 'cancelled',
                 joinedAt: new Date('2023-01-01'),
                 cancelledAt: new Date('2023-02-01'),
                 save: jest.fn(),
                 _id: mockMembershipId
-            } as unknown as IMembershipDocument;
+            } as unknown as IMemberDocument;
 
             CreatorPage.findById.mockResolvedValue({ _id: mockPageId } as unknown as ICreatorPageDocument);
-            Membership.findOne.mockResolvedValue(mockMembership);
+            Member.findOne.mockResolvedValue(mockMembership);
 
-            await MembershipService.joinCreator({
+            await MemberService.joinCreator({
                 memberId: mockMemberId,
                 creatorId: mockCreatorId,
                 pageId: mockPageId,
@@ -124,13 +124,13 @@ describe('MembershipService', () => {
             );
         });
 
-        it('should create new membership if none exists', async () => {
+        it('should create new member if none exists', async () => {
             CreatorPage.findById.mockResolvedValue({ _id: mockPageId } as unknown as ICreatorPageDocument);
-            Membership.findOne.mockResolvedValue(null);
-            const mockNewMembership = { _id: mockMembershipId } as unknown as IMembershipDocument;
-            Membership.create.mockResolvedValue(mockNewMembership);
+            Member.findOne.mockResolvedValue(null);
+            const mockNewMembership = { _id: mockMembershipId } as unknown as IMemberDocument;
+            Member.create.mockResolvedValue(mockNewMembership);
 
-            await MembershipService.joinCreator({
+            await MemberService.joinCreator({
                 memberId: mockMemberId,
                 creatorId: mockCreatorId,
                 pageId: mockPageId,
@@ -138,7 +138,7 @@ describe('MembershipService', () => {
                 io: mockIo
             });
 
-            expect(Membership.create).toHaveBeenCalledWith({
+            expect(Member.create).toHaveBeenCalledWith({
                 memberId: mockMemberId,
                 creatorId: mockCreatorId,
                 pageId: mockPageId,
@@ -163,23 +163,23 @@ describe('MembershipService', () => {
     });
 
     describe('leaveCreator', () => {
-        it('should throw error if membership not found', async () => {
-            Membership.findOne.mockResolvedValue(null);
+        it('should throw error if member not found', async () => {
+            Member.findOne.mockResolvedValue(null);
 
-            await expect(MembershipService.leaveCreator(mockMemberId, mockMembershipId))
-                .rejects.toEqual(createError.notFound('Membership not found'));
+            await expect(MemberService.leaveCreator(mockMemberId, mockMembershipId))
+                .rejects.toEqual(createError.notFound('Member not found'));
         });
 
-        it('should successfully cancel active membership', async () => {
+        it('should successfully cancel active member', async () => {
             const mockMembership = {
                 _id: mockMembershipId,
                 pageId: mockPageId,
                 status: 'active',
                 save: jest.fn()
-            } as unknown as IMembershipDocument;
-            Membership.findOne.mockResolvedValue(mockMembership);
+            } as unknown as IMemberDocument;
+            Member.findOne.mockResolvedValue(mockMembership);
 
-            await MembershipService.leaveCreator(mockMemberId, mockMembershipId);
+            await MemberService.leaveCreator(mockMemberId, mockMembershipId);
 
             expect(mockMembership.status).toBe('cancelled');
             expect(mockMembership.save).toHaveBeenCalled();
@@ -195,10 +195,10 @@ describe('MembershipService', () => {
                 pageId: mockPageId,
                 status: 'cancelled',
                 save: jest.fn()
-            } as unknown as IMembershipDocument;
-            Membership.findOne.mockResolvedValue(mockMembership);
+            } as unknown as IMemberDocument;
+            Member.findOne.mockResolvedValue(mockMembership);
 
-            await MembershipService.leaveCreator(mockMemberId, mockMembershipId);
+            await MemberService.leaveCreator(mockMemberId, mockMembershipId);
 
             expect(mockMembership.save).not.toHaveBeenCalled();
             expect(CreatorPage.updateOne).not.toHaveBeenCalled();
@@ -206,26 +206,26 @@ describe('MembershipService', () => {
     });
 
     describe('checkMembership', () => {
-        it('should return isMember true if active membership exists', async () => {
-            const mockMembership = { status: 'active' } as unknown as IMembershipDocument;
-            Membership.findOne.mockResolvedValue(mockMembership);
+        it('should return isMember true if active member exists', async () => {
+            const mockMembership = { status: 'active' } as unknown as IMemberDocument;
+            Member.findOne.mockResolvedValue(mockMembership);
 
-            const result = await MembershipService.checkMembership(mockMemberId, mockPageId);
+            const result = await MemberService.checkMembership(mockMemberId, mockPageId);
 
             expect(result).toEqual({
                 isMember: true,
-                membership: mockMembership
+                member: mockMembership
             });
         });
 
-        it('should return isMember false if no active membership', async () => {
-            Membership.findOne.mockResolvedValue(null);
+        it('should return isMember false if no active member', async () => {
+            Member.findOne.mockResolvedValue(null);
 
-            const result = await MembershipService.checkMembership(mockMemberId, mockPageId);
+            const result = await MemberService.checkMembership(mockMemberId, mockPageId);
 
             expect(result).toEqual({
                 isMember: false,
-                membership: undefined
+                member: undefined
             });
         });
     });

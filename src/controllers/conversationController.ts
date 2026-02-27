@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../types/index.js';
 import Conversation from '../models/Conversation.js';
 import Message from '../models/Message.js';
-import Membership from '../models/Membership.js';
+import Member from '../models/Member.js';
 import { Server as SocketIOServer } from 'socket.io';
 
 // Get user's conversations
@@ -64,15 +64,15 @@ export const createConversation = async (req: AuthenticatedRequest, res: Respons
             return;
         }
 
-        // Check membership relationship
-        const membership = await Membership.findOne({
+        // Check member relationship
+        const member = await Member.findOne({
             $or: [
                 { memberId: userId, creatorId: recipientId, status: 'active' },
                 { memberId: recipientId, creatorId: userId, status: 'active' },
             ],
         }).select('creatorId memberId');
 
-        if (!membership) {
+        if (!member) {
             res.status(403).json({
                 success: false,
                 error: { code: 'FORBIDDEN', message: 'Must be a member to start conversation' },
@@ -83,8 +83,8 @@ export const createConversation = async (req: AuthenticatedRequest, res: Respons
         // Create new conversation
         conversation = await Conversation.create({
             participants: [userId, recipientId],
-            creatorId: membership.creatorId,
-            memberId: membership.memberId,
+            creatorId: member.creatorId,
+            memberId: member.memberId,
             unreadCounts: { [recipientId.toString()]: 0, [userId.toString()]: 0 },
         });
 

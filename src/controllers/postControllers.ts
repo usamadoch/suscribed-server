@@ -5,7 +5,7 @@ import PostLike from '../models/PostLike.js';
 import PostView from '../models/PostView.js';
 import Comment from '../models/Comment.js';
 import CreatorPage from '../models/CreatorPage.js';
-import Membership from '../models/Membership.js';
+import Member from '../models/Member.js';
 import { NotificationService } from '../services/notificationService.js';
 import { cloudinaryService } from '../services/media/cloudinaryService.js';
 import { muxService } from '../services/media/muxService.js';
@@ -97,7 +97,7 @@ export const getCreatorPosts = async (req: MaybeAuthenticatedRequest, res: Respo
             .sort({ isPinned: -1, createdAt: -1 })
             .limit(Number(limit));
 
-        // Build membership map for access checking
+        // Build member map for access checking
         const membershipMap = new Map<string, boolean>();
         const likedPostIds = new Set<string>();
 
@@ -109,13 +109,13 @@ export const getCreatorPosts = async (req: MaybeAuthenticatedRequest, res: Respo
                     : cId.toString();
             }))];
 
-            const memberships = await Membership.find({
+            const members = await Member.find({
                 memberId: req.user._id,
                 creatorId: { $in: creatorIds },
                 status: 'active',
             }).select('creatorId');
 
-            memberships.forEach(m => {
+            members.forEach(m => {
                 membershipMap.set(m.creatorId.toString(), true);
             });
 
@@ -175,10 +175,10 @@ export const getPostById = async (req: MaybeAuthenticatedRequest, res: Response,
         const userId = req.user?._id?.toString() || null;
         const isOwner = userId !== null && userId === creatorId;
 
-        // Check membership for member-only posts
+        // Check member for member-only posts
         let isMember = false;
         if (post.visibility === 'members' && !isOwner && req.user) {
-            const hasMembership = await Membership.exists({
+            const hasMembership = await Member.exists({
                 memberId: req.user._id,
                 creatorId: creatorId,
                 status: 'active',
@@ -298,13 +298,13 @@ export const createPost = async (req: AuthenticatedRequest, res: Response, next:
             );
 
             // Notify all members about the new post
-            const memberships = await Membership.find({
+            const members = await Member.find({
                 creatorId: req.user._id,
                 status: 'active',
             }).select('memberId');
 
-            if (memberships.length > 0) {
-                const recipientIds = memberships.map(m => m.memberId.toString());
+            if (members.length > 0) {
+                const recipientIds = members.map(m => m.memberId.toString());
 
                 await NotificationService.sendMassNotification(
                     recipientIds,
@@ -354,13 +354,13 @@ export const updatePost = async (req: AuthenticatedRequest, res: Response, next:
                 await CreatorPage.updateOne({ _id: page._id }, { $inc: { postCount: 1 } });
 
                 // Notify all members about the new post
-                const memberships = await Membership.find({
+                const members = await Member.find({
                     creatorId: req.user._id,
                     status: 'active',
                 }).select('memberId');
 
-                if (memberships.length > 0) {
-                    const recipientIds = memberships.map(m => m.memberId.toString());
+                if (members.length > 0) {
+                    const recipientIds = members.map(m => m.memberId.toString());
 
                     await NotificationService.sendMassNotification(
                         recipientIds,
@@ -535,13 +535,13 @@ export const getPostComments = async (req: MaybeAuthenticatedRequest, res: Respo
             const isOwner = req.user._id.toString() === post.creatorId.toString();
 
             if (!isOwner) {
-                const membership = await Membership.findOne({
+                const member = await Member.findOne({
                     memberId: req.user._id,
                     creatorId: post.creatorId,
                     status: 'active',
                 });
 
-                if (!membership) {
+                if (!member) {
                     res.status(403).json({
                         success: false,
                         error: { code: 'FORBIDDEN', message: 'Members only content' },

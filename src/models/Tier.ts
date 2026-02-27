@@ -1,9 +1,9 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { IMembershipPlan, MembershipPlanStatus } from '../types/index.js';
+import { ITier, TierStatus } from '../types/index.js';
 
-export interface IMembershipPlanDocument extends Omit<IMembershipPlan, '_id'>, Document { }
+export interface ITierDocument extends Omit<ITier, '_id'>, Document { }
 
-const membershipPlanSchema = new Schema<IMembershipPlanDocument>(
+const tierSchema = new Schema<ITierDocument>(
     {
         creatorId: {
             type: Schema.Types.ObjectId,
@@ -44,7 +44,7 @@ const membershipPlanSchema = new Schema<IMembershipPlanDocument>(
         },
         status: {
             type: String,
-            enum: ['draft', 'published'] as MembershipPlanStatus[],
+            enum: ['draft', 'published'] as TierStatus[],
             default: 'draft',
         },
         activeSubscribers: {
@@ -67,11 +67,11 @@ const membershipPlanSchema = new Schema<IMembershipPlanDocument>(
 );
 
 // Indexes
-membershipPlanSchema.index({ creatorId: 1 });
-membershipPlanSchema.index({ pageId: 1 });
-membershipPlanSchema.index({ status: 1 });
-membershipPlanSchema.index({ createdAt: -1 });
+tierSchema.index({ creatorId: 1 });
+tierSchema.index({ pageId: 1 });
+tierSchema.index({ status: 1 });
+tierSchema.index({ createdAt: -1 });
 
-const MembershipPlan = mongoose.model<IMembershipPlanDocument>('MembershipPlan', membershipPlanSchema);
+const Tier = mongoose.model<ITierDocument>('Tier', tierSchema);
 
-export default MembershipPlan;
+export default Tier;

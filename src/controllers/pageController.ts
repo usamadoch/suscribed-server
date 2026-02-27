@@ -3,7 +3,7 @@ import { AuthenticatedRequest, MaybeAuthenticatedRequest } from '../types/index.
 import { UpdatePageInput } from '../utils/validators.js';
 import CreatorPage from '../models/CreatorPage.js';
 import Post from '../models/Post.js';
-import Membership from '../models/Membership.js';
+import Member from '../models/Member.js';
 
 // Get all public pages (for explore)
 export const getPublicPages = async (_req: Request, res: Response, next: NextFunction) => {
@@ -105,7 +105,7 @@ export const getPageBySlug = async (req: MaybeAuthenticatedRequest, res: Respons
             isOwner = page.userId._id.toString() === req.user._id.toString();
 
             if (!isOwner) {
-                const membershipExists = await Membership.exists({
+                const membershipExists = await Member.exists({
                     memberId: req.user._id,
                     creatorId: page.userId._id,
                     status: 'active',
@@ -170,7 +170,7 @@ export const getPagePosts = async (req: MaybeAuthenticatedRequest, res: Response
             return;
         }
 
-        // Check membership
+        // Check member
         let isMember = false;
         let isOwner = false;
 
@@ -178,7 +178,7 @@ export const getPagePosts = async (req: MaybeAuthenticatedRequest, res: Response
             isOwner = page.userId.toString() === req.user._id.toString();
 
             if (!isOwner) {
-                const membershipExists = await Membership.exists({
+                const membershipExists = await Member.exists({
                     memberId: req.user._id,
                     pageId: page._id,
                     status: 'active',

@@ -17,7 +17,7 @@ const subscriptionSchema = new Schema<ISubscriptionDocument>(
         },
         planId: {
             type: Schema.Types.ObjectId,
-            ref: 'MembershipPlan',
+            ref: 'Tier',
             required: true,
         },
         status: {

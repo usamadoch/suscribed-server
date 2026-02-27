@@ -31,7 +31,7 @@ const rateLimitConfigs: Record<string, RateLimitConfig> = {
     joinMembership: {
         windowMs: 60 * 60 * 1000, // 1 hour
         max: 5,
-        message: 'Too many membership requests, please slow down',
+        message: 'Too many member requests, please slow down',
     },
     sendMessage: {
         windowMs: 60 * 1000, // 1 minute

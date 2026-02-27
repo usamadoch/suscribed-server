@@ -1,9 +1,9 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { IMembership, MembershipStatus } from '../types/index.js';
+import { IMember, MembershipStatus } from '../types/index.js';
 
-export interface IMembershipDocument extends Omit<IMembership, '_id'>, Document { }
+export interface IMemberDocument extends Omit<IMember, '_id'>, Document { }
 
-const membershipSchema = new Schema<IMembershipDocument>(
+const memberSchema = new Schema<IMemberDocument>(
     {
         memberId: {
             type: Schema.Types.ObjectId,
@@ -19,6 +19,9 @@ const membershipSchema = new Schema<IMembershipDocument>(
             type: Schema.Types.ObjectId,
             ref: 'CreatorPage',
             required: true,
+        },
+        tier: {
+            type: String,
         },
         status: {
             type: String,
@@ -48,13 +51,13 @@ const membershipSchema = new Schema<IMembershipDocument>(
     }
 );
 
-// Compound unique index to prevent duplicate memberships
-membershipSchema.index({ memberId: 1, creatorId: 1 }, { unique: true });
-membershipSchema.index({ creatorId: 1, status: 1 });
-membershipSchema.index({ memberId: 1, status: 1 });
-membershipSchema.index({ pageId: 1 });
-membershipSchema.index({ joinedAt: -1 });
+// Compound unique index to prevent duplicate members
+memberSchema.index({ memberId: 1, creatorId: 1 }, { unique: true });
+memberSchema.index({ creatorId: 1, status: 1 });
+memberSchema.index({ memberId: 1, status: 1 });
+memberSchema.index({ pageId: 1 });
+memberSchema.index({ joinedAt: -1 });
 
-const Membership = mongoose.model<IMembershipDocument>('Membership', membershipSchema);
+const Member = mongoose.model<IMemberDocument>('Member', memberSchema);
 
-export default Membership;
+export default Member;

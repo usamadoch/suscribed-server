@@ -6,7 +6,7 @@ import CreatorPage from '../models/CreatorPage.js';
 import Post from '../models/Post.js';
 import Comment from '../models/Comment.js';
 import PostLike from '../models/PostLike.js';
-import Membership from '../models/Membership.js';
+import Member from '../models/Member.js';
 import Conversation from '../models/Conversation.js';
 import Message from '../models/Message.js';
 import Notification from '../models/Notification.js';
@@ -36,7 +36,7 @@ export const seedDatabase = async (req: Request, res: Response) => {
                 Post.deleteMany({ creatorId: { $in: existingUserIds } }).session(session),
                 Comment.deleteMany({ authorId: { $in: existingUserIds } }).session(session),
                 PostLike.deleteMany({ userId: { $in: existingUserIds } }).session(session),
-                Membership.deleteMany({ $or: [{ memberId: { $in: existingUserIds } }, { creatorId: { $in: existingUserIds } }] }).session(session),
+                Member.deleteMany({ $or: [{ memberId: { $in: existingUserIds } }, { creatorId: { $in: existingUserIds } }] }).session(session),
                 Conversation.deleteMany({ $or: [{ creatorId: { $in: existingUserIds } }, { memberId: { $in: existingUserIds } }] }).session(session),
                 Message.deleteMany({ senderId: { $in: existingUserIds } }).session(session),
                 Notification.deleteMany({ recipientId: { $in: existingUserIds } }).session(session),
@@ -131,9 +131,9 @@ export const seedDatabase = async (req: Request, res: Response) => {
 
         await CreatorPage.insertMany([pageA, pageB], { session });
 
-        // 4. Create Memberships
+        // 4. Create Members
         // Member 1 -> Alice (Active)
-        const membershipActive = new Membership({
+        const membershipActive = new Member({
             memberId: members[0]._id,
             creatorId: creatorA._id,
             pageId: pageA._id,
@@ -142,7 +142,7 @@ export const seedDatabase = async (req: Request, res: Response) => {
         });
 
         // Member 2 -> Alice (Expired/Paused)
-        const membershipPaused = new Membership({
+        const membershipPaused = new Member({
             memberId: members[1]._id,
             creatorId: creatorA._id,
             pageId: pageA._id,
@@ -151,7 +151,7 @@ export const seedDatabase = async (req: Request, res: Response) => {
             cancelledAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) // 5 days ago
         });
 
-        await Membership.insertMany([membershipActive, membershipPaused], { session });
+        await Member.insertMany([membershipActive, membershipPaused], { session });
 
         // Update member counts
         pageA.memberCount = 2; // Historical count or active? Usually active + paused tailored by business logic. keeping simple.

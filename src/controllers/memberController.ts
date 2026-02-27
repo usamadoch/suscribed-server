@@ -1,17 +1,17 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../types/index.js';
-import Membership from '../models/Membership.js';
+import Member from '../models/Member.js';
 import CreatorPage from '../models/CreatorPage.js';
-import { MembershipService } from '../services/membershipService.js';
+import { MemberService } from '../services/memberService.js';
 // import { NotificationService } from '../services/notificationService.js';
 
-// Get user's memberships (as member)
-export const getMemberships = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+// Get user's members (as member)
+export const getMember = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const page = Number(req.query.page) || 1;
         const limit = Number(req.query.limit) || 20;
 
-        const memberships = await Membership.find({
+        const members = await Member.find({
             memberId: req.user._id,
             status: 'active',
         })
@@ -24,14 +24,14 @@ export const getMemberships = async (req: AuthenticatedRequest, res: Response, n
             .skip((page - 1) * limit)
             .limit(limit);
 
-        const total = await Membership.countDocuments({
+        const total = await Member.countDocuments({
             memberId: req.user._id,
             status: 'active',
         });
 
         res.json({
             success: true,
-            data: { memberships },
+            data: { members },
             meta: {
                 pagination: {
                     page,
@@ -54,7 +54,7 @@ export const getMyMembers = async (req: AuthenticatedRequest, res: Response, nex
         const page = Number(req.query.page) || 1;
         const limit = Number(req.query.limit) || 20;
 
-        const memberships = await Membership.find({
+        const members = await Member.find({
             creatorId: req.user._id,
             status: 'active',
         })
@@ -63,14 +63,14 @@ export const getMyMembers = async (req: AuthenticatedRequest, res: Response, nex
             .skip((page - 1) * limit)
             .limit(limit);
 
-        const total = await Membership.countDocuments({
+        const total = await Member.countDocuments({
             creatorId: req.user._id,
             status: 'active',
         });
 
         res.json({
             success: true,
-            data: { memberships },
+            data: { members },
             meta: {
                 pagination: {
                     page,
@@ -93,7 +93,7 @@ export const joinCreator = async (req: AuthenticatedRequest, res: Response, next
     try {
         const { creatorId, pageId } = req.body;
 
-        const membership = await MembershipService.joinCreator({
+        const member = await MemberService.joinCreator({
             memberId: req.user._id.toString(),
             creatorId,
             pageId,
@@ -103,33 +103,33 @@ export const joinCreator = async (req: AuthenticatedRequest, res: Response, next
 
         res.status(201).json({
             success: true,
-            data: { membership },
+            data: { member },
         });
     } catch (error) {
         next(error);
     }
 };
 
-// Leave a creator (cancel membership)
+// Leave a creator (cancel member)
 export const leaveCreator = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        await MembershipService.leaveCreator(req.user._id.toString(), req.params.id as string);
+        await MemberService.leaveCreator(req.user._id.toString(), req.params.id as string);
 
         res.json({
             success: true,
-            data: { message: 'Membership cancelled' },
+            data: { message: 'Member cancelled' },
         });
     } catch (error) {
         next(error);
     }
 };
 
-// Check membership status for a page
+// Check member status for a page
 export const checkMembership = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { pageId } = req.params;
 
-        const result = await MembershipService.checkMembership(req.user._id.toString(), pageId as string);
+        const result = await MemberService.checkMembership(req.user._id.toString(), pageId as string);
 
         res.json({
             success: true,

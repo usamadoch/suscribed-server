@@ -9,7 +9,7 @@ import {
     MemberGrowthData,
     PostSanitized
 } from '../types/index.js';
-import Membership from '../models/Membership.js';
+import Member from '../models/Member.js';
 import Post from '../models/Post.js';
 import PostView from '../models/PostView.js';
 import CreatorPage from '../models/CreatorPage.js';
@@ -53,12 +53,12 @@ export const getOverview = async (req: AuthenticatedRequest, res: Response, next
 
         // Current period stats
         const [currentMembers, previousMembers] = await Promise.all([
-            Membership.countDocuments({
+            Member.countDocuments({
                 creatorId,
                 joinedAt: { $gte: startDate },
                 status: 'active',
             }),
-            Membership.countDocuments({
+            Member.countDocuments({
                 creatorId,
                 joinedAt: { $gte: previousStartDate, $lt: startDate },
                 status: 'active',
@@ -136,7 +136,7 @@ export const getMembers = async (req: AuthenticatedRequest, res: Response, next:
         startDate.setDate(startDate.getDate() - Number(days));
 
         // Daily member growth
-        const membersByDay = await Membership.aggregate([
+        const membersByDay = await Member.aggregate([
             {
                 $match: {
                     creatorId,

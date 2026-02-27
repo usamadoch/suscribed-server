@@ -1,20 +1,22 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest, MaybeAuthenticatedRequest } from '../types/index.js';
-import MembershipPlan from '../models/MembershipPlan.js';
+import Tier from '../models/Tier.js';
 import CreatorPage from '../models/CreatorPage.js';
 import Subscription from '../models/Subscription.js';
+import Member from '../models/Member.js';
+import Transaction from '../models/Transaction.js';
 
 export const createPlan = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { name, price, description, benefits, badgeTitle, status } = req.body;
 
-        const creatorPage = await CreatorPage.findOne({ userId: req.user._id });
+        const creatorPage = await CreatorPage.findOne({ userId: req.user._id }).select('_id').lean();
         if (!creatorPage) {
             res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Creator page not found' } });
             return;
         }
 
-        const plan = await MembershipPlan.create({
+        const plan = await Tier.create({
             creatorId: req.user._id,
             pageId: creatorPage._id,
             name,
@@ -37,7 +39,7 @@ export const createPlan = async (req: AuthenticatedRequest, res: Response, next:
 export const getCreatorPlans = async (req: MaybeAuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { creatorId } = req.params;
-        const plans = await MembershipPlan.find({ creatorId, status: 'published' }).sort({ price: 1 });
+        const plans = await Tier.find({ creatorId, status: 'published' }).sort({ price: 1 }).lean();
 
         res.json({
             success: true,
@@ -50,7 +52,7 @@ export const getCreatorPlans = async (req: MaybeAuthenticatedRequest, res: Respo
 
 export const getMyPlans = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const plans = await MembershipPlan.find({ creatorId: req.user._id }).sort({ price: 1 });
+        const plans = await Tier.find({ creatorId: req.user._id }).sort({ price: 1 }).lean();
 
         res.json({
             success: true,
@@ -66,20 +68,24 @@ export const updatePlan = async (req: AuthenticatedRequest, res: Response, next:
         const { id } = req.params;
         const { name, price, description, benefits, badgeTitle, status } = req.body;
 
-        const plan = await MembershipPlan.findOne({ _id: id, creatorId: req.user._id });
+        const updateData: any = {};
+        if (name) updateData.name = name;
+        if (price !== undefined) updateData.price = price;
+        if (description) updateData.description = description;
+        if (benefits) updateData.benefits = benefits;
+        if (badgeTitle !== undefined) updateData.badgeTitle = badgeTitle;
+        if (status) updateData.status = status;
+
+        const plan = await Tier.findOneAndUpdate(
+            { _id: id, creatorId: req.user._id },
+            { $set: updateData },
+            { new: true }
+        ).lean();
+
         if (!plan) {
             res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Plan not found' } });
             return;
         }
-
-        if (name) plan.name = name;
-        if (price !== undefined) plan.price = price;
-        if (description) plan.description = description;
-        if (benefits) plan.benefits = benefits;
-        if (badgeTitle !== undefined) plan.badgeTitle = badgeTitle;
-        if (status) plan.status = status;
-
-        await plan.save();
 
         res.json({
             success: true,
@@ -94,14 +100,14 @@ export const subscribeMock = async (req: AuthenticatedRequest, res: Response, ne
     try {
         const { planId } = req.params;
 
-        const plan = await MembershipPlan.findById(planId);
+        const plan = await Tier.findById(planId).lean();
         if (!plan) {
             res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Plan not found' } });
             return;
         }
 
         // Check if already subscribed
-        const existingSub = await Subscription.findOne({
+        const existingSub = await Subscription.exists({
             userId: req.user._id,
             planId: plan._id,
             status: 'active'
@@ -115,17 +121,44 @@ export const subscribeMock = async (req: AuthenticatedRequest, res: Response, ne
         const thirtyDaysFromNow = new Date();
         thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
-        const subscription = await Subscription.create({
-            userId: req.user._id,
-            creatorId: plan.creatorId,
-            planId: plan._id,
-            status: 'active',
-            currentPeriodStart: new Date(),
-            currentPeriodEnd: thirtyDaysFromNow
-        });
+        const gross = plan.price;
+        const platformFee = Math.round(gross * 0.10); // 10% platform fee
+        const net = gross - platformFee;
 
-        // Increment subscribers on plan
-        await MembershipPlan.findByIdAndUpdate(plan._id, { $inc: { activeSubscribers: 1 } });
+        const fourteenDaysFromNow = new Date();
+        fourteenDaysFromNow.setDate(fourteenDaysFromNow.getDate() + 14);
+
+        const [subscription] = await Promise.all([
+            Subscription.create({
+                userId: req.user._id,
+                creatorId: plan.creatorId,
+                planId: plan._id,
+                status: 'active',
+                currentPeriodStart: new Date(),
+                currentPeriodEnd: thirtyDaysFromNow
+            }),
+            Member.findOneAndUpdate(
+                { memberId: req.user._id, creatorId: plan.creatorId },
+                {
+                    $set: { status: 'active', tier: plan.name },
+                    $setOnInsert: { pageId: plan.pageId }
+                },
+                { upsert: true, new: true }
+            ),
+            Transaction.create({
+                userId: req.user._id,
+                creatorId: plan.creatorId,
+                pageId: plan.pageId,
+                type: 'subscription',
+                gross,
+                platformFee,
+                net,
+                status: 'pending',
+                releaseAt: fourteenDaysFromNow,
+                description: `Subscription to ${plan.name}`,
+            }),
+            Tier.findByIdAndUpdate(plan._id, { $inc: { activeSubscribers: 1 } })
+        ]);
 
         res.status(201).json({
             success: true,

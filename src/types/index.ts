@@ -286,6 +286,7 @@ export interface ITier {
     description: string;
     benefits: string[];
     badgeTitle?: string;
+    isHighlighted: boolean;
     status: TierStatus;
     activeSubscribers: number;
     stripeProductId?: string;

@@ -74,6 +74,7 @@ export const updatePlan = async (req: AuthenticatedRequest, res: Response, next:
         if (description) updateData.description = description;
         if (benefits) updateData.benefits = benefits;
         if (badgeTitle !== undefined) updateData.badgeTitle = badgeTitle;
+        if (req.body.isHighlighted !== undefined) updateData.isHighlighted = req.body.isHighlighted;
         if (status) updateData.status = status;
 
         const plan = await Tier.findOneAndUpdate(
@@ -81,6 +82,13 @@ export const updatePlan = async (req: AuthenticatedRequest, res: Response, next:
             { $set: updateData },
             { new: true }
         ).lean();
+
+        if (plan && req.body.isHighlighted) {
+            await Tier.updateMany(
+                { creatorId: req.user._id, _id: { $ne: plan._id } },
+                { $set: { isHighlighted: false } }
+            );
+        }
 
         if (!plan) {
             res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Plan not found' } });

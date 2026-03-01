@@ -42,6 +42,10 @@ const tierSchema = new Schema<ITierDocument>(
             trim: true,
             maxlength: 50,
         },
+        isHighlighted: {
+            type: Boolean,
+            default: false,
+        },
         status: {
             type: String,
             enum: ['draft', 'published'] as TierStatus[],

@@ -703,3 +703,92 @@ export const getRecentVideos = async (req: MaybeAuthenticatedRequest, res: Respo
         next(error);
     }
 };
+
+// Get home feed — posts from all subscribed creators (cursor-based pagination)
+export const getHomeFeed = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { cursor, limit = 10 } = req.query;
+        const userId = req.user._id;
+        const pageLimit = Math.min(Math.max(Number(limit), 1), 50);
+
+        // 1. Find all pages the user is subscribed to (active memberships)
+        const memberships = await Member.find({
+            memberId: userId,
+            status: 'active',
+        }).select('pageId creatorId');
+
+        if (memberships.length === 0) {
+            res.json({
+                success: true,
+                data: { posts: [] },
+                meta: { hasNextPage: false, nextCursor: null },
+            });
+            return;
+        }
+
+        const subscribedPageIds = memberships.map(m => m.pageId);
+
+        // 2. Build query — published posts from subscribed pages
+        const query: Record<string, unknown> = {
+            pageId: { $in: subscribedPageIds },
+            status: 'published',
+        };
+
+        // Cursor-based pagination: fetch posts older than cursor
+        if (cursor) {
+            query.publishedAt = { $lt: new Date(String(cursor)) };
+        }
+
+        // 3. Fetch posts, populate page info so each post has its own creator details
+        const posts = await Post.find(query)
+            .select('_id caption postType visibility viewCount likeCount commentCount creatorId pageId createdAt publishedAt isPinned mediaAttachments.type mediaAttachments.url mediaAttachments.thumbnailUrl mediaAttachments.duration mediaAttachments.cloudinaryPublicId mediaAttachments.muxPlaybackId mediaAttachments.filename mediaAttachments.fileSize mediaAttachments.mimeType mediaAttachments.dimensions mediaAttachments.status')
+            .populate('pageId', 'displayName avatarUrl pageSlug')
+            .sort({ publishedAt: -1 })
+            .limit(pageLimit + 1); // Fetch one extra to determine hasNextPage
+
+        // 4. Determine pagination
+        const hasNextPage = posts.length > pageLimit;
+        const resultPosts = hasNextPage ? posts.slice(0, pageLimit) : posts;
+        const nextCursor = hasNextPage && resultPosts.length > 0
+            ? resultPosts[resultPosts.length - 1].publishedAt?.toISOString() || null
+            : null;
+
+        // 5. Build membership map for access control
+        const membershipMap = new Map<string, boolean>();
+        memberships.forEach(m => {
+            membershipMap.set(m.creatorId.toString(), true);
+        });
+
+        // 6. Check liked posts
+        const likedPostIds = new Set<string>();
+        const likes = await PostLike.find({
+            userId,
+            postId: { $in: resultPosts.map(p => p._id) },
+        }).select('postId');
+
+        likes.forEach(like => {
+            likedPostIds.add(like.postId.toString());
+        });
+
+        // 7. Sanitize posts (access control for locked/unlocked)
+        const sanitizedPosts = sanitizePostsForClient(
+            resultPosts,
+            userId.toString(),
+            membershipMap
+        );
+
+        // 8. Augment with isLiked status
+        const postsWithLikes = sanitizedPosts.map(post => ({
+            ...post,
+            isLiked: likedPostIds.has(post._id.toString()),
+        }));
+
+        res.json({
+            success: true,
+            data: { posts: postsWithLikes },
+            meta: { hasNextPage, nextCursor },
+        });
+    } catch (error) {
+        next(error);
+    }
+};

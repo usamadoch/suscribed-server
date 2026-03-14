@@ -12,7 +12,8 @@ import {
     toggleLikePost,
     getPostComments,
     addPostComment,
-    getRecentVideos
+    getRecentVideos,
+    getHomeFeed
 } from '../controllers/postControllers.js';
 
 const router = Router();
@@ -27,6 +28,9 @@ router.get('/creator', optionalAuth, getCreatorPosts as RequestHandler);
 
 // Get recent videos
 router.get('/recent-videos', optionalAuth, getRecentVideos as RequestHandler);
+
+// Home feed: posts from subscribed creators (cursor-based)
+router.get('/feed', protect, getHomeFeed as RequestHandler);
 
 // Get single post
 router.get('/:id', optionalAuth, getPostById as RequestHandler);

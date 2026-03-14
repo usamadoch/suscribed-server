@@ -1,10 +1,9 @@
 
 import { Response, NextFunction } from 'express';
-import { AuthenticatedRequest, SuccessResponse } from '../types/index.js';
+import { AuthenticatedRequest } from '../types/index.js';
 import { cloudinaryService } from '../services/media/cloudinaryService.js';
 import { muxService } from '../services/media/muxService.js';
 import Post from '../models/Post.js';
-import { VideoAttachment } from '../types/index.js';
 
 // Helper to sanitize path components
 const sanitize = (str: string) => str.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();

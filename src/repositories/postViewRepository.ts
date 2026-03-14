@@ -1,0 +1,11 @@
+import PostView from '../models/PostView.js';
+
+export const postViewRepository = {
+    updateOne: (query: Record<string, unknown>, update: Record<string, unknown>, options?: Record<string, unknown>) => {
+        return PostView.updateOne(query, update, options);
+    },
+
+    deleteMany: (query: Record<string, unknown>) => {
+        return PostView.deleteMany(query);
+    }
+};

@@ -42,10 +42,13 @@ import seedRoutes from './routes/seedRoutes.js';
 import payoutRoutes from './routes/payout.js';
 import adminRoutes from './routes/admin.js';
 import membershipPlanRoutes from './routes/tier.js';
+import webhookRoutes from './routes/webhook.js';
 // Import socket handlers
 import { initializeSockets } from './sockets/index.js';
 import { closeQueues, initializeQueues } from 'jobs/queues.js';
 import { startNotificationWorker, stopNotificationWorker } from 'jobs/workers/notificationWorker.js';
+import { startReconciliationCron } from './jobs/reconciliation.js';
+
 
 
 
@@ -91,10 +94,10 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
-// JSON body parsing - skip for Mux webhook which needs raw body
+// JSON body parsing — skip routes that need raw body for HMAC signature verification
 app.use((req, res, next) => {
-    // Mux webhook requires raw body for signature verification
-    if (req.path === '/api/media/mux/webhook') {
+    const url = req.originalUrl;
+    if (url.includes('/api/media/mux/webhook') || url.includes('/api/webhooks/safepay')) {
         return next();
     }
     express.json({ limit: '10mb' })(req, res, next);
@@ -184,6 +187,7 @@ app.use('/api/seed', seedRoutes);
 app.use('/api/payouts', payoutRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/tiers', membershipPlanRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 
 // 404 handler
@@ -284,6 +288,9 @@ const startServer = async (): Promise<void> => {
 
         // Initialize BullMQ queues
         initializeQueues();
+
+        // Start CRON jobs
+        startReconciliationCron();
 
         // Start background workers
         startNotificationWorker(io);

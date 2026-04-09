@@ -39,7 +39,7 @@ const transactionSchema = new Schema<ITransactionDocument>(
         },
         status: {
             type: String,
-            enum: ['pending', 'available', 'refunded', 'paid'] as TransactionStatus[],
+            enum: ['pending', 'available', 'refunded', 'paid', 'completed', 'failed'] as TransactionStatus[],
             default: 'pending',
         },
         releaseAt: {

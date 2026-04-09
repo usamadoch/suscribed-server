@@ -47,6 +47,7 @@ export const ErrorCodes = {
     // Server errors (500)
     SERVER_ERROR: 'SERVER_ERROR',
     DATABASE_ERROR: 'DATABASE_ERROR',
+    PLAN_CREATION_FAILED: 'PLAN_CREATION_FAILED',
 
     // Business logic errors (400/403)
     COMMENTS_DISABLED: 'COMMENTS_DISABLED',
@@ -91,6 +92,7 @@ export const ErrorMessages: Record<ErrorCode, string> = {
 
     [ErrorCodes.SERVER_ERROR]: 'An unexpected error occurred',
     [ErrorCodes.DATABASE_ERROR]: 'Database operation failed',
+    [ErrorCodes.PLAN_CREATION_FAILED]: 'Failed to create subscription plan with payment provider',
 
     [ErrorCodes.COMMENTS_DISABLED]: 'Comments are disabled for this post',
     [ErrorCodes.MEMBERS_ONLY]: 'This content is only available to members',
@@ -132,6 +134,7 @@ export const ErrorStatusCodes: Record<ErrorCode, number> = {
 
     [ErrorCodes.SERVER_ERROR]: 500,
     [ErrorCodes.DATABASE_ERROR]: 500,
+    [ErrorCodes.PLAN_CREATION_FAILED]: 502,
 
     [ErrorCodes.COMMENTS_DISABLED]: 403,
     [ErrorCodes.MEMBERS_ONLY]: 403,

@@ -23,7 +23,7 @@ const subscriptionSchema = new Schema<ISubscriptionDocument>(
         status: {
             type: String,
             enum: ['active', 'past_due', 'canceled', 'incomplete'] as SubscriptionStatus[],
-            default: 'active',
+            default: 'incomplete',
         },
         currentPeriodStart: {
             type: Date,
@@ -37,13 +37,16 @@ const subscriptionSchema = new Schema<ISubscriptionDocument>(
             type: Date,
             default: null,
         },
-        stripeSubscriptionId: {
+
+        safepaySubscriptionId: {
             type: String,
             default: '',
+            index: true,
         },
-        stripeCustomerId: {
+        interval: {
             type: String,
-            default: '',
+            enum: ['MONTHLY', 'YEARLY'],
+            default: 'MONTHLY',
         },
     },
     {

@@ -56,11 +56,11 @@ const tierSchema = new Schema<ITierDocument>(
             default: 0,
             min: 0,
         },
-        stripeProductId: {
+        safepayPlanId: {
             type: String,
             default: '',
         },
-        stripePriceId: {
+        safepayYearlyPlanId: {
             type: String,
             default: '',
         },

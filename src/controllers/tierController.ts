@@ -3,8 +3,15 @@ import { AuthenticatedRequest, MaybeAuthenticatedRequest } from '../types/index.
 import Tier from '../models/Tier.js';
 import CreatorPage from '../models/CreatorPage.js';
 import Subscription from '../models/Subscription.js';
-import Member from '../models/Member.js';
-import Transaction from '../models/Transaction.js';
+
+import { TierService } from '../services/tierService.js';
+
+// tierController.ts
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const { createSafepayPlan, getOrCreateSafepayCustomer, getSavedPaymentMethod, chargesavedCard, createTracker, getAuthToken } = require('../services/safepayService.js');
+
+
 
 export const createPlan = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -16,6 +23,8 @@ export const createPlan = async (req: AuthenticatedRequest, res: Response, next:
             return;
         }
 
+        // const { safepayPlanId, safepayYearlyPlanId } = await TierService.createSafepayPlans(name, price);
+
         const plan = await Tier.create({
             creatorId: req.user._id,
             pageId: creatorPage._id,
@@ -24,7 +33,9 @@ export const createPlan = async (req: AuthenticatedRequest, res: Response, next:
             description,
             benefits: benefits || [],
             badgeTitle,
-            status: status || 'draft'
+            status: status || 'draft',
+            // safepayPlanId,
+            // safepayYearlyPlanId
         });
 
         res.status(201).json({
@@ -66,11 +77,16 @@ export const getMyPlans = async (req: AuthenticatedRequest, res: Response, next:
 export const updatePlan = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { id } = req.params;
-        const { name, price, description, benefits, badgeTitle, status } = req.body;
+        const { name, description, benefits, badgeTitle, status } = req.body;
+
+        const existingPlan = await Tier.findOne({ _id: id, creatorId: req.user._id }).lean();
+        if (!existingPlan) {
+            res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Plan not found' } });
+            return;
+        }
 
         const updateData: any = {};
         if (name) updateData.name = name;
-        if (price !== undefined) updateData.price = price;
         if (description) updateData.description = description;
         if (benefits) updateData.benefits = benefits;
         if (badgeTitle !== undefined) updateData.badgeTitle = badgeTitle;
@@ -104,74 +120,156 @@ export const updatePlan = async (req: AuthenticatedRequest, res: Response, next:
     }
 };
 
-export const subscribeMock = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+export const updatePlanPrice = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { planId } = req.params;
+        const { id } = req.params;
+        const { price } = req.body;
 
-        const plan = await Tier.findById(planId).lean();
+        if (price === undefined || typeof price !== 'number') {
+            res.status(400).json({ success: false, error: { message: "Invalid price" } });
+            return;
+        }
+
+        const existingPlan = await Tier.findOne({ _id: id, creatorId: req.user._id }).lean();
+        if (!existingPlan) {
+            res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Plan not found' } });
+            return;
+        }
+
+        // If price hasn't changed, just return success
+        if (price === existingPlan.price) {
+            res.json({ success: true, data: existingPlan });
+            return;
+        }
+
+        const planName = existingPlan.name;
+
+        const { safepayPlanId, safepayYearlyPlanId } = await TierService.createSafepayPlans(planName, price);
+
+        const plan = await Tier.findOneAndUpdate(
+            { _id: id, creatorId: req.user._id },
+            {
+                $set: {
+                    price,
+                    safepayPlanId,
+                    safepayYearlyPlanId
+                }
+            },
+            { new: true }
+        ).lean();
+
         if (!plan) {
             res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Plan not found' } });
             return;
         }
 
-        // Check if already subscribed
-        const existingSub = await Subscription.exists({
-            userId: req.user._id,
-            planId: plan._id,
-            status: 'active'
+        res.json({
+            success: true,
+            data: plan,
         });
+    } catch (error) {
+        next(error);
+    }
+};
 
-        if (existingSub) {
-            res.status(400).json({ success: false, error: { code: 'ALREADY_SUBSCRIBED', message: 'You are already subscribed to this plan' } });
+export const subscribeToPlan = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { tierId } = req.params;
+        const { interval = 'MONTHLY' } = req.body;
+
+        const tier = await Tier.findById(tierId).lean();
+        if (!tier) {
+            res.status(404).json({ success: false, error: { message: "Tier not found" } });
             return;
         }
 
-        const thirtyDaysFromNow = new Date();
-        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+        const priceToCharge = interval === 'YEARLY' ? tier.price * 12 : tier.price;
+        const safepayPlanToUse = interval === 'YEARLY' ? tier.safepayYearlyPlanId : tier.safepayPlanId;
 
-        const gross = plan.price;
-        const platformFee = Math.round(gross * 0.10); // 10% platform fee
-        const net = gross - platformFee;
+        // 1. Create a Customer (get cus_xxx token)
+        const customerToken = await getOrCreateSafepayCustomer(req.user);
 
-        const fourteenDaysFromNow = new Date();
-        fourteenDaysFromNow.setDate(fourteenDaysFromNow.getDate() + 14);
-
-        const [subscription] = await Promise.all([
-            Subscription.create({
-                userId: req.user._id,
-                creatorId: plan.creatorId,
-                planId: plan._id,
-                status: 'active',
-                currentPeriodStart: new Date(),
-                currentPeriodEnd: thirtyDaysFromNow
-            }),
-            Member.findOneAndUpdate(
-                { memberId: req.user._id, creatorId: plan.creatorId },
-                {
-                    $set: { status: 'active', tier: plan.name },
-                    $setOnInsert: { pageId: plan.pageId }
-                },
-                { upsert: true, new: true }
-            ),
-            Transaction.create({
-                userId: req.user._id,
-                creatorId: plan.creatorId,
-                pageId: plan.pageId,
-                type: 'subscription',
-                gross,
-                platformFee,
-                net,
-                status: 'pending',
-                releaseAt: fourteenDaysFromNow,
-                description: `Subscription to ${plan.name}`,
-            }),
-            Tier.findByIdAndUpdate(plan._id, { $inc: { activeSubscribers: 1 } })
-        ]);
-
-        res.status(201).json({
-            success: true,
-            data: subscription,
+        // 2. Create a Tracker → mode: "payment", entry_mode: "raw", user: cus_xxx
+        const tracker = await createTracker(priceToCharge, safepayPlanToUse, customerToken, "PKR", {
+            mode: "payment",
+            entry_mode: "raw"
         });
+
+        const trackerToken = tracker.token;
+
+
+
+        // 3. Generate Auth Token → Get back: short-lived JWT (tbt)
+        const authToken = await getAuthToken();
+
+        // Save incomplete subscription
+        await Subscription.create({
+            userId: req.user._id,
+            creatorId: tier.creatorId,
+            planId: tier._id,
+            status: 'incomplete',
+            safepaySubscriptionId: trackerToken,
+            interval
+        });
+
+        // 4. Send back trackerToken and authToken
+        res.json({
+            success: true,
+            data: {
+                trackerToken,
+                authToken,
+            }
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+export const confirmSubscription = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const { tierId } = req.params;
+
+        const plan = await Tier.findById(tierId).lean();
+        if (!plan) {
+            res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Plan not found' } });
+            return;
+        }
+
+        const { tracker } = req.query;
+
+        let pendingSub;
+        if (tracker) {
+            pendingSub = await Subscription.findOne({
+                userId: req.user._id,
+                planId: plan._id,
+                safepaySubscriptionId: tracker as string
+            });
+        }
+
+        // Fallback to latest if no tracker or tracker search failed
+        if (!pendingSub) {
+            pendingSub = await Subscription.findOne({
+                userId: req.user._id,
+                planId: plan._id,
+            }).sort({ createdAt: -1 });
+        }
+
+        if (!pendingSub) {
+            res.status(404).json({ success: false, error: { message: "No subscription found" } });
+            return;
+        }
+
+        if (pendingSub.status === 'active') {
+            res.status(200).json({ success: true, data: pendingSub });
+            return;
+        } else if (pendingSub.status === 'canceled') {
+            res.status(400).json({ success: false, error: { message: "Payment failed" } });
+            return;
+        } else {
+            // Still incomplete
+            res.status(202).json({ success: true, data: pendingSub });
+            return;
+        }
     } catch (error) {
         next(error);
     }

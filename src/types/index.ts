@@ -46,6 +46,8 @@ export interface IUser {
     googleId?: string; // Optional: Only present for Google-authenticated users
     onboardingStep: OnboardingStep;
     notificationPreferences: NotificationPreferences;
+    safepayCustomerToken?: string;
+    safepayPaymentMethodToken?: string;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -289,8 +291,8 @@ export interface ITier {
     isHighlighted: boolean;
     status: TierStatus;
     activeSubscribers: number;
-    stripeProductId?: string;
-    stripePriceId?: string;
+    safepayPlanId?: string;
+    safepayYearlyPlanId?: string;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -307,8 +309,8 @@ export interface ISubscription {
     currentPeriodStart?: Date;
     currentPeriodEnd?: Date;
     canceledAt?: Date;
-    stripeSubscriptionId?: string;
-    stripeCustomerId?: string;
+    safepaySubscriptionId?: string;
+    interval?: 'MONTHLY' | 'YEARLY';
     createdAt: Date;
     updatedAt: Date;
 }
@@ -480,7 +482,7 @@ export interface UploadedFile {
 export * from './analytics.js';
 
 // Transaction types
-export type TransactionStatus = 'pending' | 'available' | 'refunded' | 'paid';
+export type TransactionStatus = 'pending' | 'available' | 'refunded' | 'paid' | 'completed' | 'failed';
 export type TransactionType = 'subscription' | 'refund';
 
 export interface ITransaction {

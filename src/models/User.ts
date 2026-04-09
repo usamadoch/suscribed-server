@@ -101,6 +101,8 @@ const userSchema = new Schema<IUserDocument>(
                 timezone: { type: String, default: 'UTC' },
             },
         },
+        safepayCustomerToken: { type: String, default: null },
+        safepayPaymentMethodToken: { type: String, default: null },
     },
     {
         timestamps: true,
@@ -109,12 +111,13 @@ const userSchema = new Schema<IUserDocument>(
 
 // Hash password before saving
 userSchema.pre('save', async function () {
-    if (!this.isModified('passwordHash')) {
+    const doc = this as unknown as IUserDocument;
+    if (!doc.isModified('passwordHash')) {
         return;
     }
 
     const salt = await bcrypt.genSalt(12);
-    this.passwordHash = await bcrypt.hash(this.passwordHash, salt);
+    doc.passwordHash = await bcrypt.hash(doc.passwordHash, salt);
 });
 
 // Compare password method

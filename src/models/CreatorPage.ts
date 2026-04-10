@@ -126,8 +126,6 @@ const creatorPageSchema = new Schema<ICreatorPageDocument>(
 );
 
 // Indexes
-creatorPageSchema.index({ pageSlug: 1 });
-creatorPageSchema.index({ userId: 1 });
 creatorPageSchema.index({ isPublic: 1 });
 creatorPageSchema.index({ memberCount: -1 });
 creatorPageSchema.index({ createdAt: -1 });

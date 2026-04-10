@@ -1,9 +1,9 @@
-
-import User from '../models/User.js';
+import { userRepository } from '../repositories/userRepository.js';
+import { notificationRepository } from '../repositories/notificationRepository.js';
 import { NotificationType, NotificationPreferences, NewMessageMetadata, NotificationMetadata } from '../types/index.js';
 import { Server } from 'socket.io';
 import { logger } from '../config/logger.js';
-import Notification from '../models/Notification.js';
+import { INotificationDocument } from '../models/Notification.js';
 
 interface SendNotificationOptions {
     actionUrl: string;
@@ -65,7 +65,7 @@ export class NotificationService {
         options: SendNotificationOptions
     ) {
         try {
-            const user = await User.findById(recipientId).select('notificationPreferences');
+            const user = await userRepository.findById(recipientId, 'notificationPreferences');
             if (!user) {
                 logger.warn(`Notification recipient not found: ${recipientId}`);
                 return null;
@@ -78,23 +78,18 @@ export class NotificationService {
 
             // [Modified] Check for existing unread notification to aggregate
             if (type === 'new_message' && options.metadata?.conversationId) {
-                const existingNotification = await Notification.findOne({
+                const existingNotification = await notificationRepository.findOne({
                     recipientId,
                     type: 'new_message',
                     isRead: false,
                     'metadata.conversationId': options.metadata.conversationId
-                });
+                }) as INotificationDocument;
 
                 if (existingNotification) {
                     // Type guard/assertion for strict metadata usage
                     const metadata = existingNotification.metadata as unknown as NewMessageMetadata;
                     const currentCount = metadata.messageCount || 1;
                     const newCount = currentCount + 1;
-
-                    // Extracts sender name from existing title or body if possible, 
-                    // or assumes the title passed in is consistent (e.g. "New message" or "John Doe")
-                    // We'll update the body to be summary style.
-                    // Assuming 'title' passed is usually "New message" or Sender Name.
 
                     // Use a generic summary message
                     existingNotification.body = `${newCount} new messages`;
@@ -107,12 +102,9 @@ export class NotificationService {
                     };
 
                     existingNotification.metadata = newMetadata;
-                    // Update timestamp to float to top
-                    // existingNotification.updatedAt = new Date(); // Mongoose handles this on save if timestamps: true
-
                     await existingNotification.save();
 
-                    // Emit socket update (might need frontend handling for 'update' vs 'new')
+                    // Emit socket update
                     if (options.io) {
                         options.io.to(`user:${recipientId}`).emit('notification', existingNotification);
                     }
@@ -126,7 +118,7 @@ export class NotificationService {
                 metadata.messageCount = 1;
             }
 
-            const notification = await Notification.create({
+            const notification = await notificationRepository.create({
                 recipientId,
                 type,
                 title,
@@ -164,19 +156,17 @@ export class NotificationService {
 
         try {
             // Fetch all users to check preferences
-            // Optimization: In a huge app, we would query only those who have the setting enabled at DB level
-            // But for now, fetching prefs is safer to ensure logic consistency
-            const users = await User.find({
+            const users = await userRepository.find({
                 _id: { $in: recipientIds }
-            }).select('_id notificationPreferences');
+            }, '_id notificationPreferences');
 
-            const eligibleRecipients = users.filter(user =>
+            const eligibleRecipients = users.filter((user: any) =>
                 this.isNotificationEnabled(user.notificationPreferences, type)
             );
 
             if (eligibleRecipients.length === 0) return [];
 
-            const notificationsData = eligibleRecipients.map(user => ({
+            const notificationsData = eligibleRecipients.map((user: any) => ({
                 recipientId: user._id,
                 type,
                 title,
@@ -191,11 +181,11 @@ export class NotificationService {
             }));
 
             // Bulk insert
-            const notifications = await Notification.insertMany(notificationsData);
+            const notifications = await notificationRepository.insertMany(notificationsData);
 
             // Bulk emit
             if (options.io) {
-                notifications.forEach(notification => {
+                notifications.forEach((notification: any) => {
                     options.io!.to(`user:${notification.recipientId}`).emit('notification', notification);
                 });
             }

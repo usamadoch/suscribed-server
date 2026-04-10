@@ -1,33 +1,18 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../types/index.js';
-import Member from '../models/Member.js';
-import CreatorPage from '../models/CreatorPage.js';
+import { memberRepository } from '../repositories/memberRepository.js';
 import { MemberService } from '../services/memberService.js';
-// import { NotificationService } from '../services/notificationService.js';
 
-// Get user's members (as member)
+// Get user's memberships (as member)
 export const getMember = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const page = Number(req.query.page) || 1;
         const limit = Number(req.query.limit) || 20;
 
-        const members = await Member.find({
-            memberId: req.user._id,
-            status: 'active',
-        })
-            .populate({
-                path: 'pageId',
-                select: 'pageSlug displayName avatarUrl bannerUrl tagline memberCount',
-            })
-            .populate('creatorId', 'displayName username avatarUrl')
-            .sort({ joinedAt: -1 })
-            .skip((page - 1) * limit)
-            .limit(limit);
-
-        const total = await Member.countDocuments({
-            memberId: req.user._id,
-            status: 'active',
-        });
+        const [members, total] = await Promise.all([
+            memberRepository.findMemberSubscriptions(req.user._id, { joinedAt: -1 }, (page - 1) * limit, limit),
+            memberRepository.countDocuments({ memberId: req.user._id, status: 'active' }),
+        ]);
 
         res.json({
             success: true,
@@ -54,19 +39,10 @@ export const getMyMembers = async (req: AuthenticatedRequest, res: Response, nex
         const page = Number(req.query.page) || 1;
         const limit = Number(req.query.limit) || 20;
 
-        const members = await Member.find({
-            creatorId: req.user._id,
-            status: 'active',
-        })
-            .populate('memberId', 'displayName username avatarUrl bio createdAt')
-            .sort({ joinedAt: -1 })
-            .skip((page - 1) * limit)
-            .limit(limit);
-
-        const total = await Member.countDocuments({
-            creatorId: req.user._id,
-            status: 'active',
-        });
+        const [members, total] = await Promise.all([
+            memberRepository.findCreatorMembers(req.user._id, { joinedAt: -1 }, (page - 1) * limit, limit),
+            memberRepository.countDocuments({ creatorId: req.user._id, status: 'active' }),
+        ]);
 
         res.json({
             success: true,
@@ -87,7 +63,6 @@ export const getMyMembers = async (req: AuthenticatedRequest, res: Response, nex
     }
 };
 
-// Join a creator (become a member)
 // Join a creator (become a member)
 export const joinCreator = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -110,10 +85,10 @@ export const joinCreator = async (req: AuthenticatedRequest, res: Response, next
     }
 };
 
-// Leave a creator (cancel member)
+// Leave a creator (cancel membership)
 export const leaveCreator = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        await MemberService.leaveCreator(req.user._id.toString(), req.params.id as string);
+        await MemberService.leaveCreator(req.user._id.toString(), String(req.params.id));
 
         res.json({
             success: true,
@@ -124,12 +99,10 @@ export const leaveCreator = async (req: AuthenticatedRequest, res: Response, nex
     }
 };
 
-// Check member status for a page
+// Check membership status for a page
 export const checkMembership = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { pageId } = req.params;
-
-        const result = await MemberService.checkMembership(req.user._id.toString(), pageId as string);
+        const result = await MemberService.checkMembership(req.user._id.toString(), String(req.params.pageId));
 
         res.json({
             success: true,

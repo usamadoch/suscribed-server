@@ -3,9 +3,10 @@ import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 
 import config from '../config/index.js';
-import User, { IUserDocument } from '../models/User.js';
-import RefreshToken from '../models/RefreshToken.js';
-import CreatorPage from '../models/CreatorPage.js';
+import { userRepository } from '../repositories/userRepository.js';
+import { refreshTokenRepository } from '../repositories/refreshTokenRepository.js';
+import { creatorPageRepository } from '../repositories/creatorPageRepository.js';
+import { IUserDocument } from '../models/User.js';
 import { JWTPayload, UserRole, ONBOARDING_STEPS, OnboardingStep } from '../types/index.js';
 import { SignupInput, LoginInput, ChangePasswordInput } from '../utils/validators.js';
 import { createError } from '../middleware/errorHandler.js';
@@ -29,7 +30,7 @@ interface AuthResponse {
 
 // Check if email exists
 export const checkEmail = async (email: string): Promise<boolean> => {
-    const userExists = await User.exists({ email: email.toLowerCase() });
+    const userExists = await userRepository.existsByEmail(email);
     return !!userExists;
 };
 
@@ -52,7 +53,7 @@ const generateTokens = async (user: IUserDocument): Promise<AuthTokens> => {
     const expiresAt = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000);
 
     // Store refresh token in database
-    await RefreshToken.create({
+    await refreshTokenRepository.create({
         userId: user._id,
         token: refreshToken,
         expiresAt,
@@ -81,19 +82,19 @@ export const signup = async (input: SignupInput): Promise<AuthResponse> => {
     const { email, password, displayName, username, role } = input;
 
     // Check if email already exists
-    const existingEmail = await User.findOne({ email: email.toLowerCase() });
+    const existingEmail = await userRepository.findByEmail(email);
     if (existingEmail) {
         throw createError.duplicateEmail();
     }
 
     // Check if username already exists
-    const existingUsername = await User.findOne({ username: username.toLowerCase() });
+    const existingUsername = await userRepository.findByUsername(username);
     if (existingUsername) {
         throw createError.duplicateUsername();
     }
 
     // Create user
-    const user = await User.create({
+    const user = await userRepository.create({
         email: email.toLowerCase(),
         passwordHash: password, // Will be hashed by pre-save hook
         displayName,
@@ -101,11 +102,11 @@ export const signup = async (input: SignupInput): Promise<AuthResponse> => {
         role,
         isEmailVerified: true, // Skip email verification for MVP
         onboardingStep: role === 'creator' ? ONBOARDING_STEPS.ACCOUNT_CREATED : ONBOARDING_STEPS.COMPLETE,
-    });
+    }) as IUserDocument;
 
     // If creator, create their page
     if (role === 'creator') {
-        await CreatorPage.create({
+        await creatorPageRepository.create({
             userId: user._id,
             pageSlug: username.toLowerCase(),
             displayName,
@@ -117,7 +118,7 @@ export const signup = async (input: SignupInput): Promise<AuthResponse> => {
 
     // Update last login
     user.lastLoginAt = new Date();
-    await user.save();
+    await user.save(); // Using .save() here because we have the document and it has Mongoose hooks
 
     return {
         user: sanitizeUserForAuth(user),
@@ -131,7 +132,7 @@ export const login = async (input: LoginInput): Promise<AuthResponse> => {
     const { email, password } = input;
 
     // Find user with password field
-    const user = await User.findOne({ email: email.toLowerCase() }).select('+passwordHash');
+    const user = await userRepository.findOne({ email: email.toLowerCase() }, '+passwordHash') as IUserDocument;
 
     if (!user) {
         throw createError.invalidCredentials();
@@ -189,7 +190,7 @@ export const googleLogin = async (code: string, role: string = 'member'): Promis
     const lowerEmail = email.toLowerCase();
 
     // Check if user exists
-    let user = await User.findOne({ email: lowerEmail });
+    let user = await userRepository.findByEmail(lowerEmail) as IUserDocument;
     let isNewUser = false;
 
     if (!user) {
@@ -203,7 +204,7 @@ export const googleLogin = async (code: string, role: string = 'member'): Promis
         // Create random password (user can reset later if they want to use password login)
         const password = crypto.randomBytes(32).toString('hex');
 
-        user = await User.create({
+        user = await userRepository.create({
             email: lowerEmail,
             passwordHash: password,
             displayName: name || email.split('@')[0],
@@ -213,9 +214,7 @@ export const googleLogin = async (code: string, role: string = 'member'): Promis
             googleId,
             avatarUrl: picture,
             onboardingStep: role === 'creator' ? ONBOARDING_STEPS.ACCOUNT_CREATED : ONBOARDING_STEPS.COMPLETE,
-        });
-
-        // Ensure creator page creation if needed? User role is 'member' by default so no.
+        }) as IUserDocument;
     } else {
         // Link Google ID if not already linked
         if (!user.googleId) {
@@ -228,19 +227,18 @@ export const googleLogin = async (code: string, role: string = 'member'): Promis
         throw createError.accountDeactivated();
     }
 
-    // Ensure Creator Page exists for creators (handles case where existing member logs in as creator or partial signup)
+    // Ensure Creator Page exists for creators
     if (role === 'creator') {
-        // If user role is not creator, upgrade them (optional, depends on business logic, here we assume intention)
         if (user.role !== 'creator') {
             user.role = 'creator';
             await user.save();
         }
 
-        const existingPage = await CreatorPage.findOne({ userId: user._id });
+        const existingPage = await creatorPageRepository.findOne({ userId: user._id });
         if (!existingPage) {
-            await CreatorPage.create({
+            await creatorPageRepository.create({
                 userId: user._id,
-                pageSlug: user.username, // Default slug
+                pageSlug: user.username,
                 displayName: user.displayName,
             });
         }
@@ -263,26 +261,26 @@ export const googleLogin = async (code: string, role: string = 'member'): Promis
 // Refresh token service
 export const refreshAccessToken = async (refreshToken: string): Promise<AuthTokens> => {
     // Find refresh token
-    const tokenDoc = await RefreshToken.findOne({ token: refreshToken });
+    const tokenDoc = await refreshTokenRepository.findOne({ token: refreshToken });
 
     if (!tokenDoc) {
         throw createError.invalidToken();
     }
 
     if (tokenDoc.expiresAt < new Date()) {
-        await RefreshToken.deleteOne({ _id: tokenDoc._id });
+        await refreshTokenRepository.deleteOne({ _id: tokenDoc._id });
         throw createError.tokenExpired();
     }
 
     // Get minimal user required for generating tokens
-    const user = await User.findById(tokenDoc.userId).select('_id email role isActive');
+    const user = await userRepository.findById(tokenDoc.userId, '_id email role isActive') as IUserDocument;
 
     if (!user || !user.isActive) {
         throw createError.userNotFound();
     }
 
     // Delete old refresh token
-    await RefreshToken.deleteOne({ _id: tokenDoc._id });
+    await refreshTokenRepository.deleteOne({ _id: tokenDoc._id });
 
     // Generate new tokens
     return generateTokens(user);
@@ -292,22 +290,22 @@ export const refreshAccessToken = async (refreshToken: string): Promise<AuthToke
 export const logout = async (userId: string, refreshToken?: string): Promise<void> => {
     if (refreshToken) {
         // Delete specific refresh token
-        await RefreshToken.deleteOne({ userId, token: refreshToken });
+        await refreshTokenRepository.deleteOne({ userId, token: refreshToken });
     } else {
         // Delete all refresh tokens for user
-        await RefreshToken.deleteMany({ userId });
+        await refreshTokenRepository.deleteMany({ userId });
     }
 };
 
 // Get current user — lean auth fields only (used by /auth/me)
 export const getCurrentUser = async (userId: string): Promise<Partial<IUserDocument> | null> => {
-    const user = await User.findById(userId).select('_id email role displayName username avatarUrl onboardingStep');
+    const user = await userRepository.findById(userId, '_id email role displayName username avatarUrl onboardingStep');
     return user ? user.toObject() as Partial<IUserDocument> : null;
 };
 
 // Get full user profile (used by settings page via /auth/me/full)
 export const getFullUser = async (userId: string): Promise<Partial<IUserDocument> | null> => {
-    const user = await User.findById(userId).select('-passwordHash -__v -lastLoginAt -isActive');
+    const user = await userRepository.findById(userId, '-passwordHash -__v -lastLoginAt -isActive');
     return user ? user.toObject() as Partial<IUserDocument> : null;
 };
 
@@ -319,7 +317,7 @@ export const changePassword = async (
     const { currentPassword, newPassword } = input;
 
     // Find user with password
-    const user = await User.findById(userId).select('+passwordHash');
+    const user = await userRepository.findById(userId, '+passwordHash') as IUserDocument;
     if (!user) {
         throw createError.userNotFound();
     }
@@ -340,7 +338,7 @@ export const changePassword = async (
     await user.save();
 
     // Invalidate all existing sessions
-    await RefreshToken.deleteMany({ userId });
+    await refreshTokenRepository.deleteMany({ userId });
 };
 
 // Update onboarding step
@@ -354,7 +352,7 @@ export const updateOnboardingStep = async (
 
     const validStep = step as OnboardingStep;
 
-    const user = await User.findById(userId);
+    const user = await userRepository.findById(userId) as IUserDocument;
     if (!user) {
         throw createError.userNotFound();
     }

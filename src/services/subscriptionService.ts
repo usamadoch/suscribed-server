@@ -1,7 +1,7 @@
-import Subscription from '../models/Subscription.js';
-import Member from '../models/Member.js';
-import Transaction from '../models/Transaction.js';
-import Tier from '../models/Tier.js';
+import { subscriptionRepository } from '../repositories/subscriptionRepository.js';
+import { memberRepository } from '../repositories/memberRepository.js';
+import { transactionRepository } from '../repositories/transactionRepository.js';
+import { tierRepository } from '../repositories/tierRepository.js';
 import mongoose from 'mongoose';
 
 export class SubscriptionService {
@@ -50,14 +50,12 @@ export class SubscriptionService {
         fourteenDaysFromNow.setDate(fourteenDaysFromNow.getDate() + 14);
 
         await Promise.all([
-            Subscription.findByIdAndUpdate(subscriptionId, {
-                $set: {
-                    status: 'active',
-                    currentPeriodStart: new Date(),
-                    currentPeriodEnd: nextBillingDate,
-                }
+            subscriptionRepository.updateById(subscriptionId, {
+                status: 'active',
+                currentPeriodStart: new Date(),
+                currentPeriodEnd: nextBillingDate,
             }),
-            Member.findOneAndUpdate(
+            memberRepository.findOneAndUpdate(
                 { memberId: userId, creatorId: creatorId },
                 {
                     $set: { status: 'active', tier: tierName },
@@ -65,7 +63,7 @@ export class SubscriptionService {
                 },
                 { upsert: true, new: true }
             ),
-            Transaction.create({
+            transactionRepository.create({
                 userId: userId,
                 creatorId: creatorId,
                 pageId: pageId,
@@ -77,7 +75,7 @@ export class SubscriptionService {
                 releaseAt: fourteenDaysFromNow,
                 description: `Subscription to ${tierName}`,
             }),
-            Tier.findByIdAndUpdate(planId, { $inc: { activeSubscribers: 1 } })
+            tierRepository.updateById(planId, { $inc: { activeSubscribers: 1 } })
         ]);
     }
 
@@ -97,7 +95,7 @@ export class SubscriptionService {
         const fourteenDaysFromNow = new Date();
         fourteenDaysFromNow.setDate(fourteenDaysFromNow.getDate() + 14);
 
-        await Transaction.create({
+        await transactionRepository.create({
             userId,
             creatorId,
             pageId,

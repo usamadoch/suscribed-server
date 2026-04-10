@@ -1,5 +1,5 @@
-import Member from '../models/Member.js';
-import CreatorPage from '../models/CreatorPage.js';
+import { memberRepository } from '../repositories/memberRepository.js';
+import { creatorPageRepository } from '../repositories/creatorPageRepository.js';
 import { NotificationService } from './notificationService.js';
 import { createError } from '../middleware/errorHandler.js';
 import { IMemberDocument } from '../models/Member.js';
@@ -21,13 +21,13 @@ export class MemberService {
         const { memberId, creatorId, pageId, memberDisplayName, io } = options;
 
         // Verify page exists
-        const page = await CreatorPage.findById(pageId);
+        const page = await creatorPageRepository.findById(pageId);
         if (!page) {
             throw createError.notFound('Page not found');
         }
 
         // Check if already a member
-        const existing = await Member.findOne({ memberId, creatorId });
+        const existing = await memberRepository.findOne({ memberId, creatorId }) as IMemberDocument;
 
         if (existing) {
             if (existing.status === 'active') {
@@ -40,20 +40,20 @@ export class MemberService {
             existing.cancelledAt = null;
             await existing.save();
 
-            await CreatorPage.updateOne({ _id: pageId }, { $inc: { memberCount: 1 } });
+            await creatorPageRepository.updateOne({ _id: pageId }, { $inc: { memberCount: 1 } });
 
             return existing;
         }
 
         // Create member
-        const member = await Member.create({
+        const member = await memberRepository.create({
             memberId,
             creatorId,
             pageId,
-        });
+        }) as IMemberDocument;
 
         // Update member count
-        await CreatorPage.updateOne({ _id: pageId }, { $inc: { memberCount: 1 } });
+        await creatorPageRepository.updateOne({ _id: pageId }, { $inc: { memberCount: 1 } });
 
         // Notify creator
         await NotificationService.sendNotification(
@@ -76,20 +76,17 @@ export class MemberService {
      * Leave a creator (cancel member)
      */
     static async leaveCreator(memberId: string, membershipId: string): Promise<void> {
-        const member = await Member.findOne({
+        const member = await memberRepository.findOne({
             _id: membershipId,
             memberId,
-        });
+        }) as IMemberDocument;
 
         if (!member) {
             throw createError.notFound('Member not found');
         }
 
-        // Idempotency check: if already cancelled, do nothing (or throw, but usually idempotent is safer)
+        // Idempotency check: if already cancelled, do nothing
         if (member.status === 'cancelled') {
-            // For consistency with "cannot decrement if already cancelled", we just return.
-            // But user requirement says "cannot decrement if already cancelled". 
-            // If we just return, we ensure we don't decrement.
             return;
         }
 
@@ -98,8 +95,7 @@ export class MemberService {
         await member.save();
 
         // Update member count safely
-        // We use $gt: 0 check to ensure we don't go below zero, although app logic *should* prevent this.
-        await CreatorPage.updateOne(
+        await creatorPageRepository.updateOne(
             { _id: member.pageId, memberCount: { $gt: 0 } },
             { $inc: { memberCount: -1 } }
         );
@@ -109,7 +105,7 @@ export class MemberService {
      * Check member status
      */
     static async checkMembership(memberId: string, pageId: string) {
-        const member = await Member.findOne({
+        const member = await memberRepository.findOne({
             memberId,
             pageId,
             status: 'active',

@@ -1,44 +1,22 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../types/index.js';
+import { conversationService } from '../services/conversationService.js';
 import Conversation from '../models/Conversation.js';
 import Message from '../models/Message.js';
-import Member from '../models/Member.js';
 import { Server as SocketIOServer } from 'socket.io';
 
 // Get user's conversations
 export const getConversations = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { page = 1, limit = 20 } = req.query;
-        const userId = req.user._id;
+        const page = Number(req.query.page) || 1;
+        const limit = Number(req.query.limit) || 20;
 
-        const conversations = await Conversation.find({
-            participants: userId,
-            isActive: true,
-        })
-            .populate('creatorId', 'displayName username avatarUrl')
-            .populate('memberId', 'displayName username avatarUrl')
-            .sort({ updatedAt: -1 })
-            .skip((Number(page) - 1) * Number(limit))
-            .limit(Number(limit));
-
-        const total = await Conversation.countDocuments({
-            participants: userId,
-            isActive: true,
-        });
+        const result = await conversationService.getConversations(req.user._id, page, limit);
 
         res.json({
             success: true,
-            data: { conversations },
-            meta: {
-                pagination: {
-                    page: Number(page),
-                    limit: Number(limit),
-                    totalItems: total,
-                    totalPages: Math.ceil(total / Number(limit)),
-                    hasNextPage: Number(page) * Number(limit) < total,
-                    hasPrevPage: Number(page) > 1,
-                },
-            },
+            data: { conversations: result.conversations },
+            meta: { pagination: result.pagination },
         });
     } catch (error) {
         next(error);
@@ -49,51 +27,12 @@ export const getConversations = async (req: AuthenticatedRequest, res: Response,
 export const createConversation = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { recipientId } = req.body;
-        const userId = req.user._id;
+        const result = await conversationService.createConversation(req.user._id, recipientId);
 
-        // Check if conversation already exists
-        let conversation = await Conversation.findOne({
-            participants: { $all: [userId, recipientId] },
-        });
-
-        if (conversation) {
-            res.json({
-                success: true,
-                data: { conversation, isNew: false },
-            });
-            return;
-        }
-
-        // Check member relationship
-        const member = await Member.findOne({
-            $or: [
-                { memberId: userId, creatorId: recipientId, status: 'active' },
-                { memberId: recipientId, creatorId: userId, status: 'active' },
-            ],
-        }).select('creatorId memberId');
-
-        if (!member) {
-            res.status(403).json({
-                success: false,
-                error: { code: 'FORBIDDEN', message: 'Must be a member to start conversation' },
-            });
-            return;
-        }
-
-        // Create new conversation
-        conversation = await Conversation.create({
-            participants: [userId, recipientId],
-            creatorId: member.creatorId,
-            memberId: member.memberId,
-            unreadCounts: { [recipientId.toString()]: 0, [userId.toString()]: 0 },
-        });
-
-        await conversation.populate('creatorId', 'displayName username avatarUrl');
-        await conversation.populate('memberId', 'displayName username avatarUrl');
-
-        res.status(201).json({
+        const statusCode = result.isNew ? 201 : 200;
+        res.status(statusCode).json({
             success: true,
-            data: { conversation, isNew: true },
+            data: result,
         });
     } catch (error) {
         next(error);
@@ -103,66 +42,16 @@ export const createConversation = async (req: AuthenticatedRequest, res: Respons
 // Get conversation messages
 export const getConversationMessages = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const { page, limit = 20, cursor } = req.query;
-        const userId = req.user._id;
+        const limit = Number(req.query.limit) || 20;
+        const cursor = req.query.cursor as string | undefined;
+        const conversationId = String(req.params.id);
 
-        // Verify user is participant
-        const conversationExists = await Conversation.exists({
-            _id: req.params.id,
-            participants: userId,
-        });
-
-        if (!conversationExists) {
-            res.status(404).json({
-                success: false,
-                error: { code: 'NOT_FOUND', message: 'Conversation not found' },
-            });
-            return;
-        }
-
-        const query: any = {
-            conversationId: req.params.id,
-            isDeleted: false,
-        };
-
-        if (cursor) {
-            query.createdAt = { $lt: cursor };
-        }
-
-        const messages = await Message.find(query)
-            .populate('senderId', 'displayName username avatarUrl')
-            .sort({ createdAt: -1 })
-            .limit(Number(limit));
-
-        const total = await Message.countDocuments({
-            conversationId: req.params.id,
-            isDeleted: false,
-        });
-
-        // Reset unread count for current user
-        const unreadKey = `unreadCounts.${userId.toString()}`;
-        await Conversation.updateOne(
-            { _id: req.params.id },
-            { $set: { [unreadKey]: 0 } }
-        );
-
-        const nextCursor = messages.length > 0 ? messages[messages.length - 1].createdAt : null;
-        const hasMore = messages.length === Number(limit);
+        const result = await conversationService.getConversationMessages(conversationId, req.user._id, limit, cursor);
 
         res.json({
             success: true,
-            data: {
-                messages, // Returns Newest -> Oldest
-                nextCursor
-            },
-            meta: {
-                pagination: {
-                    limit: Number(limit),
-                    totalItems: total,
-                    cursor: nextCursor,
-                    hasNextPage: hasMore
-                },
-            },
+            data: { messages: result.messages, nextCursor: result.nextCursor },
+            meta: { pagination: result.pagination },
         });
     } catch (error) {
         next(error);
@@ -170,10 +59,12 @@ export const getConversationMessages = async (req: AuthenticatedRequest, res: Re
 };
 
 // Send message
+// NOTE: This handler retains direct model access for the socket.io participant-finding logic.
+// A full extraction would require reworking the conversation model queries, deferred to keep things safe.
 export const sendMessage = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const userId = req.user._id;
-        const conversationId = req.params.id as string;
+        const conversationId = String(req.params.id);
 
         // Verify user is participant
         const conversation = await Conversation.findOne({
@@ -222,9 +113,7 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
         // Emit socket event for real-time updates (if socket server is available)
         const io: SocketIOServer | undefined = req.app.get('io');
         if (io) {
-            // Emit to conversation room for real-time message display
             io.to(`conversation:${conversationId}`).emit('new_message', message);
-            // Emit to recipient's user room for unread count update in sidebar
             io.to(`user:${recipientId?.toString()}`).emit('new_message_notification', {
                 conversationId,
                 message,
@@ -245,48 +134,13 @@ export const sendMessage = async (req: AuthenticatedRequest, res: Response, next
 // Mark message as read
 export const markMessageAsRead = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const userId = req.user._id;
-
-        // Verify user is participant in conversation
-        const conversationExists = await Conversation.exists({
-            _id: req.params.conversationId,
-            participants: userId,
-        });
-
-        if (!conversationExists) {
-            res.status(404).json({
-                success: false,
-                error: { code: 'NOT_FOUND', message: 'Conversation not found' },
-            });
-            return;
-        }
-
-        // Verify message belongs to this conversation
-        const message = await Message.findOneAndUpdate(
-            {
-                _id: req.params.messageId,
-                conversationId: req.params.conversationId,
-            },
-            { status: 'read', readAt: new Date() },
-            { new: true }
-        );
-
-        if (!message) {
-            res.status(404).json({
-                success: false,
-                error: { code: 'NOT_FOUND', message: 'Message not found' },
-            });
-            return;
-        }
-
-        // Emit socket event (if socket server is available)
         const io: SocketIOServer | undefined = req.app.get('io');
-        if (io) {
-            io.to(`conversation:${req.params.conversationId}`).emit('message_read', {
-                messageId: message._id,
-                readAt: message.readAt,
-            });
-        }
+        const message = await conversationService.markMessageAsRead(
+            String(req.params.conversationId),
+            String(req.params.messageId),
+            req.user._id,
+            io
+        );
 
         res.json({
             success: true,
@@ -300,61 +154,8 @@ export const markMessageAsRead = async (req: AuthenticatedRequest, res: Response
 // Get total unread message count across all conversations
 export const getUnreadMessageCount = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const userId = req.user._id.toString();
-
-        // Aggregate unread counts from all user's conversations
-        // unreadCounts is stored as a Map, so we need to convert and filter
-        const result = await Conversation.aggregate([
-            {
-                $match: {
-                    participants: req.user._id,
-                    isActive: true,
-                },
-            },
-            {
-                // Convert the Map to an array of key-value pairs
-                $addFields: {
-                    unreadCountsArray: { $objectToArray: '$unreadCounts' },
-                },
-            },
-            {
-                // Find the unread count for this specific user
-                $addFields: {
-                    userUnreadCount: {
-                        $let: {
-                            vars: {
-                                userEntry: {
-                                    $filter: {
-                                        input: '$unreadCountsArray',
-                                        as: 'entry',
-                                        cond: { $eq: ['$$entry.k', userId] },
-                                    },
-                                },
-                            },
-                            in: {
-                                $ifNull: [
-                                    { $arrayElemAt: ['$$userEntry.v', 0] },
-                                    0,
-                                ],
-                            },
-                        },
-                    },
-                },
-            },
-            {
-                $group: {
-                    _id: null,
-                    totalUnread: { $sum: '$userUnreadCount' },
-                },
-            },
-        ]);
-
-        const totalUnread = result.length > 0 ? result[0].totalUnread : 0;
-
-        res.json({
-            success: true,
-            data: { count: totalUnread },
-        });
+        const count = await conversationService.getUnreadMessageCount(req.user._id);
+        res.json({ success: true, data: { count } });
     } catch (error) {
         next(error);
     }

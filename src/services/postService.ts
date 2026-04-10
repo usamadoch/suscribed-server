@@ -208,31 +208,34 @@ export const postService = {
         if (!post) throw createError.notFound('Post');
 
         const wasPublished = post.status === 'published';
-        Object.assign(post, data);
+        const updateData = { ...data };
+        if (!wasPublished && data.status === 'published') {
+            updateData.publishedAt = new Date();
+        }
 
-        if (!wasPublished && post.status === 'published') {
-            post.publishedAt = new Date();
-            const page = await creatorPageRepository.findById(post.pageId, '_id displayName');
+        const updatedPost = await postRepository.findByIdAndUpdateNew(postId, updateData);
+
+        if (!wasPublished && updatedPost && updatedPost.status === 'published') {
+            const page = await creatorPageRepository.findById(updatedPost.pageId, '_id displayName');
             if (page) {
                 await creatorPageRepository.updateOne({ _id: page._id }, { $inc: { postCount: 1 } });
 
                 const members = await memberRepository.find({ creatorId: userId, status: 'active' }, 'memberId');
                 if (members.length > 0) {
                     const recipientIds = members.map((m: any) => m.memberId.toString());
-                    const previewText = post.caption ? (post.caption.substring(0, 80) + (post.caption.length > 80 ? '...' : '')) : 'Active check it out!';
+                    const previewText = updatedPost.caption ? (updatedPost.caption.substring(0, 80) + (updatedPost.caption.length > 80 ? '...' : '')) : 'Active check it out!';
                     await NotificationService.sendMassNotification(
                         recipientIds,
                         'new_post',
                         'New post!',
                         `${page.displayName} posted: ${previewText}`,
-                        { actionUrl: `/posts/${post._id}`, actionLabel: 'View post', metadata: { postId: post._id, creatorId: userId }, io }
+                        { actionUrl: `/posts/${updatedPost._id}`, actionLabel: 'View post', metadata: { postId: updatedPost._id, creatorId: userId }, io }
                     );
                 }
             }
         }
         
-        await post.save();
-        return post;
+        return updatedPost;
     },
 
     async deletePost(userId: string | Types.ObjectId, postId: string) {

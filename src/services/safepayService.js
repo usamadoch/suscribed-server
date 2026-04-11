@@ -1,5 +1,5 @@
-const Safepay = require("@sfpy/node-core");
-const { v4: uuidv4 } = require("uuid");
+import Safepay from "@sfpy/node-core";
+import { v4 as uuidv4 } from "uuid";
 
 const IS_PROD = process.env.NODE_ENV === "production";
 const HOST = IS_PROD
@@ -317,7 +317,7 @@ const getSafepayTrackerStatus = async (trackerToken) => {
 };
 
 
-module.exports = {
+export {
     createSafepayPlan,
     getOrCreateSafepayCustomer,
     getSavedPaymentMethod,

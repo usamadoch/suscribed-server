@@ -5,10 +5,8 @@ import Tier from '../models/Tier.js';
 import Member from '../models/Member.js';
 import Transaction from '../models/Transaction.js';
 import { logger } from '../config/logger.js';
-import { createRequire } from 'module';
+import { getSafepayTrackerStatus } from '../services/safepayService.js';
 
-const require = createRequire(import.meta.url);
-const { getSafepayTrackerStatus } = require('../services/safepayService.js');
 
 export const runReconciliationTask = async () => {
     logger.info('[Reconciliation] Starting cron job for stale subscriptions');

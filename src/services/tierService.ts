@@ -4,13 +4,8 @@ import { creatorPageRepository } from '../repositories/creatorPageRepository.js'
 import { createError } from '../middleware/errorHandler.js';
 import { Types } from 'mongoose';
 
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const { getOrCreateSafepayCustomer, createTracker, getAuthToken } = require('./safepayService.js');
+import { getOrCreateSafepayCustomer, createTracker, getAuthToken, createSafepayPlan } from './safepayService.js';
 
-import { createRequire as createRequire2 } from 'module';
-const require2 = createRequire2(import.meta.url);
-const { createSafepayPlan } = require2('./safepayService.js');
 
 interface CreatePlanInput {
     name: string;

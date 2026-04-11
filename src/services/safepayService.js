@@ -1,7 +1,7 @@
 import Safepay from "@sfpy/node-core";
-import { v4 as uuidv4 } from "uuid";
 
-const IS_PROD = process.env.NODE_ENV === "production";
+const SAFEPAY_ENV = process.env.SAFEPAY_ENV || "sandbox";
+const IS_PROD = SAFEPAY_ENV === "production";
 const HOST = IS_PROD
     ? "https://api.getsafepay.com"
     : "https://sandbox.api.getsafepay.com";

@@ -328,3 +328,87 @@ export const updateOnboardingStep = async (
         next(error);
     }
 };
+
+// Fetch Youtube Channels controller
+export const fetchYoutubeChannels = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const userId = req.user._id.toString();
+        const { code } = req.body;
+
+        if (!code) {
+            res.status(400).json({
+                success: false,
+                error: {
+                    code: 'VALIDATION_ERROR',
+                    message: 'Authorization code is required',
+                },
+            });
+            return;
+        }
+
+        const data = await authService.fetchYoutubeChannels(userId, code);
+
+        res.json({
+            success: true,
+            data,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Connect Youtube controller
+export const connectYoutube = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const userId = req.user._id.toString();
+        const { channelId, secureToken } = req.body;
+
+        if (!channelId || !secureToken) {
+            res.status(400).json({
+                success: false,
+                error: {
+                    code: 'VALIDATION_ERROR',
+                    message: 'channelId and secureToken are required',
+                },
+            });
+            return;
+        }
+
+        await authService.connectYoutube(userId, channelId, secureToken);
+
+        res.json({
+            success: true,
+            data: { message: 'YouTube channel connected successfully' },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// Disconnect Youtube controller
+export const disconnectYoutube = async (
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+): Promise<void> => {
+    try {
+        const userId = req.user._id.toString();
+
+        await authService.disconnectYoutube(userId);
+
+        res.json({
+            success: true,
+            data: { message: 'YouTube channel disconnected successfully' },
+        });
+    } catch (error) {
+        next(error);
+    }
+};

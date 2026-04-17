@@ -367,3 +367,76 @@ export const updateOnboardingStep = async (
 
     return sanitizeUserForAuth(user);
 };
+
+// Fetch YouTube Channels
+export const fetchYoutubeChannels = async (userId: string, code: string): Promise<{ channels: any[], token: string }> => {
+    const { tokens } = await client.getToken(code);
+    client.setCredentials(tokens);
+
+    const googleRes = await client.request({
+        url: 'https://youtube.googleapis.com/youtube/v3/channels?part=snippet&mine=true'
+    });
+
+    const channels = (googleRes.data as any).items;
+
+    if (!channels || channels.length === 0) {
+        throw createError.invalidInput('No YouTube channel found for this account.');
+    }
+
+    const leanerChannels = channels.map((c: any) => ({
+        id: c.id,
+        title: c.snippet.title,
+        thumbnail: c.snippet.thumbnails?.default?.url || null
+    }));
+
+    const token = jwt.sign(
+        { userId, channels: leanerChannels },
+        config.jwt.accessSecret,
+        { expiresIn: '15m' }
+    );
+
+    return { channels: leanerChannels, token };
+};
+
+// Connect YouTube
+export const connectYoutube = async (userId: string, channelId: string, secureToken: string): Promise<void> => {
+    let decoded: any;
+    try {
+        decoded = jwt.verify(secureToken, config.jwt.accessSecret);
+    } catch (err) {
+        throw createError.unauthorized('Invalid or expired youtube selection session.');
+    }
+
+    if (decoded.userId !== userId) {
+        throw createError.unauthorized('Invalid youtube selection session user.');
+    }
+
+    const channel = decoded.channels.find((c: any) => c.id === channelId);
+    if (!channel) {
+        throw createError.invalidInput('Selected channel is not associated with the authenticated Google account.');
+    }
+
+    await creatorPageRepository.updateOne(
+        { userId: userId },
+        {
+            $set: {
+                youtube: {
+                    channelId: channel.id,
+                    channelName: channel.title,
+                    thumbnail: channel.thumbnail,
+                    isVerified: true
+                }
+            }
+        }
+    );
+};
+
+// Disconnect YouTube
+export const disconnectYoutube = async (userId: string): Promise<void> => {
+    await creatorPageRepository.updateOne(
+        { userId },
+        {
+            $unset: { youtube: 1 }
+        }
+    );
+};

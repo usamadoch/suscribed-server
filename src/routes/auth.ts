@@ -123,6 +123,67 @@ router.post('/google', authController.googleLogin);
 
 /**
  * @swagger
+ * /auth/youtube/channels:
+ *   post:
+ *     summary: Fetch YouTube channels
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [code]
+ *             properties:
+ *               code: { type: string }
+ *     responses:
+ *       200:
+ *         description: Channels fetched successfully (returns signed token and channels)
+ */
+router.post('/youtube/channels', protect, asAuthHandler(authController.fetchYoutubeChannels));
+
+/**
+ * @swagger
+ * /auth/youtube/connect:
+ *   post:
+ *     summary: Connect YouTube channel
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [channelId, secureToken]
+ *             properties:
+ *               channelId: { type: string }
+ *               secureToken: { type: string }
+ *     responses:
+ *       200:
+ *         description: YouTube connected successfully
+ */
+router.post('/youtube/connect', protect, asAuthHandler(authController.connectYoutube));
+
+/**
+ * @swagger
+ * /auth/youtube/disconnect:
+ *   post:
+ *     summary: Disconnect YouTube channel
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: YouTube disconnected successfully
+ */
+router.post('/youtube/disconnect', protect, asAuthHandler(authController.disconnectYoutube));
+
+/**
+ * @swagger
  * /auth/refresh:
  *   post:
  *     summary: Refresh access token

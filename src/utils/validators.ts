@@ -115,11 +115,6 @@ export const updatePageSchema = z.object({
         .regex(/^[a-z0-9_-]+$/)
         .optional(),
     about: z.string().max(10000).optional(),
-    socialLinks: z.array(z.object({
-        platform: z.enum(['twitter', 'instagram', 'youtube', 'tiktok', 'discord', 'website', 'facebook', 'linkedin', 'pinterest', 'x', 'other']),
-        url: z.string().url(),
-        label: z.string().optional(),
-    })).max(10).optional(),
     theme: z.object({
         primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
         accentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),

@@ -77,14 +77,6 @@ export interface NotificationPreferences {
     };
 }
 
-// Social links
-export type SocialPlatform = 'twitter' | 'instagram' | 'youtube' | 'tiktok' | 'discord' | 'website' | 'facebook' | 'linkedin' | 'pinterest' | 'x' | 'other';
-
-export interface SocialLink {
-    platform: SocialPlatform;
-    url: string;
-    label?: string; // Optional: Label is purely decorative/informational
-}
 
 // Page theme
 export interface PageTheme {
@@ -104,8 +96,13 @@ export interface ICreatorPage {
     avatarUrl: string | null;
     bannerUrl: string | null;
     about: string;
-    socialLinks: SocialLink[];
     theme: PageTheme;
+    youtube?: {
+        channelId: string;
+        channelName: string;
+        thumbnail: string;
+        isVerified: boolean;
+    };
     isPublic: boolean;
     memberCount: number;
     postCount: number;

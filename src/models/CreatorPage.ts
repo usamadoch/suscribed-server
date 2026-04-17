@@ -1,26 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { ICreatorPage, SocialLink, PageTheme } from '../types/index.js';
+import { ICreatorPage, PageTheme } from '../types/index.js';
 
 export interface ICreatorPageDocument extends Omit<ICreatorPage, '_id'>, Document { }
-
-const socialLinkSchema = new Schema<SocialLink>(
-    {
-        platform: {
-            type: String,
-            enum: ['twitter', 'instagram', 'youtube', 'tiktok', 'discord', 'website', 'facebook', 'linkedin', 'pinterest', 'x', 'other'],
-            required: true,
-        },
-        url: {
-            type: String,
-            required: true,
-        },
-        label: {
-            type: String,
-            default: '',
-        },
-    },
-    { _id: false }
-);
 
 const pageThemeSchema = new Schema<PageTheme>(
     {
@@ -37,6 +18,16 @@ const pageThemeSchema = new Schema<PageTheme>(
             enum: ['default', 'minimal', 'featured'],
             default: 'default',
         },
+    },
+    { _id: false }
+);
+
+const youtubeVerificationSchema = new Schema(
+    {
+        channelId: { type: String, default: null },
+        channelName: { type: String, default: null },
+        thumbnail: { type: String, default: null },
+        isVerified: { type: Boolean, default: false },
     },
     { _id: false }
 );
@@ -88,17 +79,13 @@ const creatorPageSchema = new Schema<ICreatorPageDocument>(
             default: '',
             maxlength: 10000,
         },
-        socialLinks: {
-            type: [socialLinkSchema],
-            default: [],
-            validate: [
-                (val: SocialLink[]) => val.length <= 10,
-                'Maximum 10 social links allowed',
-            ],
-        },
         theme: {
             type: pageThemeSchema,
             default: () => ({}),
+        },
+        youtube: {
+            type: youtubeVerificationSchema,
+            default: undefined,
         },
         isPublic: {
             type: Boolean,

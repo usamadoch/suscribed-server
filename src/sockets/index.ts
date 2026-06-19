@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import config from '../config/index.js';
 import { JWTPayload } from '../types/index.js';
 import User from '../models/User.js';
+import { getLiveChatHistory } from '../controllers/live/shared.js';
 
 interface SocketUser {
     id: string;
@@ -123,6 +124,23 @@ export const initializeSockets = (io: SocketIOServer): void => {
             socket.leave(`creator:${creatorId}`);
         });
 
+        // Join live session room (works for both authenticated and anonymous sockets)
+        socket.on('join_session', ({ sessionId }: { sessionId: string }) => {
+            socket.join(`live:${sessionId}`);
+            console.log(`Socket ${socket.id} joined live:${sessionId}`);
+
+            // Send cached chat history to this socket only (not the whole room)
+            const history = getLiveChatHistory(sessionId);
+            if (history.length > 0) {
+                socket.emit('chat.history', { messages: history });
+            }
+        });
+
+        socket.on('leave_session', ({ sessionId }: { sessionId: string }) => {
+            socket.leave(`live:${sessionId}`);
+            console.log(`Socket ${socket.id} left live:${sessionId}`);
+        });
+
         // Disconnect handler
         socket.on('disconnect', () => {
             if (userId) {
@@ -142,6 +160,11 @@ export const emitToUser = (io: SocketIOServer, userId: string, event: string, da
 // Helper function to emit to a conversation
 export const emitToConversation = (io: SocketIOServer, conversationId: string, event: string, data: unknown): void => {
     io.to(`conversation:${conversationId}`).emit(event, data);
+};
+
+// Helper function to emit to a live session room
+export const emitToLiveSession = (io: SocketIOServer, sessionId: string, event: string, data: unknown): void => {
+    io.to(`live:${sessionId}`).emit(event, data);
 };
 
 // Helper function to check if user is online

@@ -174,7 +174,54 @@ const getSavedPaymentMethod = async (customerToken) => {
     const sorted = wallet.sort(
         (a, b) => b.created_at.seconds - a.created_at.seconds
     );
-    return sorted[0]?.token; // pm_xxx
+    const method = sorted[0];
+    const provider = method.cybersource || method.mpgs || method.payfast || method;
+    let brand = 'Card';
+    if (provider.scheme === 1) brand = 'Visa';
+    if (provider.scheme === 2) brand = 'Mastercard';
+    if (typeof provider.scheme === 'string') brand = provider.scheme;
+    
+    return {
+        ...method,
+        scheme: brand,
+        last4: provider.last_four || provider.last4 || '****'
+    };
+};
+
+// ─── Fetch full wallet ───────────────────────────────────────────────────────
+
+const getWallet = async (customerToken) => {
+    const res = await fetch(
+        `${HOST}/user/customers/v1/${customerToken}/wallet/?limit=50&page=1`,
+        {
+            headers: {
+                "X-SFPY-MERCHANT-SECRET": process.env.SAFEPAY_SECRET_KEY,
+            },
+        }
+    );
+    const data = await res.json();
+    return data?.data?.wallet || [];
+};
+
+// ─── Delete saved payment method ──────────────────────────────────────────────
+
+const deletePaymentMethod = async (customerToken, instrumentToken) => {
+    console.log(`[Safepay] Deleting payment method: customer=${customerToken}, pm=${instrumentToken}`);
+    const res = await fetch(
+        `${HOST}/user/customers/v1/${customerToken}/wallet/${instrumentToken}`,
+        {
+            method: "DELETE",
+            headers: {
+                "X-SFPY-MERCHANT-SECRET": process.env.SAFEPAY_SECRET_KEY,
+            },
+        }
+    );
+    if (!res.ok) {
+        const text = await res.text();
+        console.error(`[Safepay] Failed to delete payment method: ${text}`);
+        return false;
+    }
+    return true;
 };
 
 // ─── Charge saved card (MIT / unscheduled_cof) ────────────────────────────────
@@ -254,13 +301,17 @@ const chargesavedCard = async (customerToken, paymentMethodToken, amount, curren
 
     const text = await res.text();
     let data;
-    try { data = JSON.parse(text); } catch { throw new Error("Invalid JSON from tracker create: " + text); }
-    if (!res.ok) throw new Error("Safepay create tracker error: " + JSON.stringify(data));
+    try { data = JSON.parse(text); } catch { 
+        throw { code: 'NETWORK_ERROR', message: "Invalid JSON from tracker create: " + text };
+    }
+    if (!res.ok) {
+        throw { code: 'TRACKER_CREATE_FAILED', message: "Safepay create tracker error: " + JSON.stringify(data) };
+    }
 
     console.log(`[Safepay] Created Charge Tracker:`, JSON.stringify(data));
 
     const trackerToken = data?.data?.tracker?.token;
-    if (!trackerToken) throw new Error("No tracker token in response");
+    if (!trackerToken) throw { code: 'TRACKER_CREATE_FAILED', message: "No tracker token in response" };
 
     // Step 2: Execute AUTHORIZATION — must include payment_method.tms.token in payload
     // entry_mode is "tms" so Safepay requires the token explicitly here too
@@ -286,8 +337,19 @@ const chargesavedCard = async (customerToken, paymentMethodToken, amount, curren
 
     const actionText = await actionRes.text();
     let actionData;
-    try { actionData = JSON.parse(actionText); } catch { throw new Error("Invalid JSON from action: " + actionText); }
-    if (!actionRes.ok) throw new Error("Safepay action error: " + JSON.stringify(actionData));
+    try { actionData = JSON.parse(actionText); } catch { 
+        throw { code: 'NETWORK_ERROR', message: "Invalid JSON from action: " + actionText };
+    }
+    
+    // Check if Safepay returned a non-success HTTP status
+    if (!actionRes.ok) {
+        throw { code: 'CHARGE_DECLINED', message: "Safepay action error: " + JSON.stringify(actionData) };
+    }
+    
+    // Check if the action state indicates failure even if HTTP status is 200
+    if (actionData?.data?.state && actionData.data.state !== 'TRACKER_ENDED') {
+        throw { code: 'CHARGE_DECLINED', message: "Payment was not authorized or captured successfully." };
+    }
 
     console.log(`[Safepay] Executed Charge Response:`, JSON.stringify(actionData));
     return actionData;
@@ -324,7 +386,9 @@ export {
     chargesavedCard,
     getSafepayTrackerStatus,
     getAuthToken,
-    createTracker
+    createTracker,
+    getWallet,
+    deletePaymentMethod
 };
 
 

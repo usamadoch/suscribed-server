@@ -2,6 +2,7 @@ import { subscriptionRepository } from '../repositories/subscriptionRepository.j
 import { userRepository } from '../repositories/userRepository.js';
 import { tierRepository } from '../repositories/tierRepository.js';
 import { SubscriptionService } from './subscriptionService.js';
+import PaidLiveMessage from '../models/PaidLiveMessage.js';
 
 export const webhookService = {
     async processPaymentSucceeded(tracker: any) {
@@ -26,7 +27,19 @@ export const webhookService = {
         });
 
         if (!pendingSub) {
-            console.log(`[Webhook] Ignored: No incomplete subscription found for tracker ${safepayTrackerId}`);
+            // Check if it's a Super Chat payment instead
+            const paidMsg = await PaidLiveMessage.findOne({ paymentId: safepayTrackerId });
+            if (paidMsg) {
+                if (paidMsg.paymentStatus === 'pending') {
+                    console.log(`[Webhook] Found pending Super Chat for tracker ${safepayTrackerId}, updating to paid`);
+                    paidMsg.paymentStatus = 'paid';
+                    await paidMsg.save();
+                } else {
+                    console.log(`[Webhook] Ignored: Super Chat already processed for tracker ${safepayTrackerId}`);
+                }
+            } else {
+                console.log(`[Webhook] Ignored: No subscription or Super Chat found for tracker ${safepayTrackerId}`);
+            }
             return;
         }
 

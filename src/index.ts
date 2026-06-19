@@ -43,6 +43,8 @@ import payoutRoutes from './routes/payout.js';
 import adminRoutes from './routes/admin.js';
 import membershipPlanRoutes from './routes/tier.js';
 import webhookRoutes from './routes/webhook.js';
+import liveRoutes from './routes/live.js';
+
 // Import socket handlers
 import { initializeSockets } from './sockets/index.js';
 import { closeQueues, initializeQueues } from 'jobs/queues.js';
@@ -188,6 +190,8 @@ app.use('/api/payouts', payoutRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/tiers', membershipPlanRoutes);
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/live', liveRoutes);
+
 
 
 // 404 handler

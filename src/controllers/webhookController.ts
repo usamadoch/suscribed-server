@@ -52,7 +52,8 @@ export const handleSafepayWebhook = async (req: Request, res: Response): Promise
 
             switch (event.type) {
                 case 'payment.succeeded': {
-                    await webhookService.processPaymentSucceeded(tracker);
+                    const io = req.app.get('io');
+                    await webhookService.processPaymentSucceeded(tracker, io);
                     break;
                 }
 

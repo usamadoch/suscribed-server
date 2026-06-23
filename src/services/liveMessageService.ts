@@ -3,9 +3,11 @@ import { liveSessionRepository } from '../repositories/liveSession.repository.js
 import { paidLiveMessageRepository } from '../repositories/paidLiveMessage.repository.js';
 import { liveChatMessageRepository } from '../repositories/liveChatMessage.repository.js';
 import { superChatTierRepository } from '../repositories/superChatTier.repository.js';
+import ChatMute from '../models/ChatMute.js';
 import { createTracker, getAuthToken, getSafepayTrackerStatus, getOrCreateSafepayCustomer, getSavedPaymentMethod, chargesavedCard, getWallet, deletePaymentMethod } from './safepayService.js';
 import { appendToChatHistory, CommonsLiveMessage } from '../controllers/live/shared.js';
 import { createError } from '../middleware/errorHandler.js';
+import { SubscriptionService } from './subscriptionService.js';
 
 export const liveMessageService = {
     async initiatePaidMessage(sessionId: string, amount: number, message: string, user: any) {
@@ -13,6 +15,11 @@ export const liveMessageService = {
 
         const session = await liveSessionRepository.findById(sessionId);
         if (!session || session.status !== 'live') throw createError.invalidInput('Session is not active');
+
+        const mute = await ChatMute.findOne({ sessionId: session._id, userId: user._id });
+        if (mute && mute.mutedUntil > new Date()) {
+            throw createError.forbidden(`You are in timeout until ${mute.mutedUntil.toLocaleTimeString()}`);
+        }
 
         const tiers = await superChatTierRepository.findActiveTiersSorted();
         const tierData = tiers.find(t => amount >= t.minAmount);
@@ -81,10 +88,11 @@ export const liveMessageService = {
             id: paidMsg._id.toString(),
             source: 'commons',
             type: 'paid',
+            senderId: user._id.toString(),
             senderName: user.displayName,
             senderAvatar: user.avatarUrl || null,
             message: paidMsg.message,
-            amountPKR: paidMsg.amountPKR,
+            amountPKR: SubscriptionService.calculateFees(paidMsg.amountPKR).net,
             tier: paidMsg.tier,
             bgColor: paidMsg.bgColor,
             headerColor: paidMsg.headerColor,
@@ -102,12 +110,14 @@ export const liveMessageService = {
         const paidMsg = await paidLiveMessageRepository.findByPaymentId(sessionId, trackerToken);
         if (!paidMsg) throw createError.notFound('Message not found');
 
-        if (paidMsg.paymentStatus === 'paid') return;
+        if (paidMsg.paymentStatus === 'paid') {
+            // Already marked as paid by the webhook. We still emit the socket event to ensure it shows up in chat.
+        } else {
+            const status = await getSafepayTrackerStatus(trackerToken);
+            if (status?.data?.state !== 'TRACKER_ENDED') throw createError.invalidInput('Payment not completed');
 
-        const status = await getSafepayTrackerStatus(trackerToken);
-        if (status?.data?.state !== 'TRACKER_ENDED') throw createError.invalidInput('Payment not completed');
-
-        await paidLiveMessageRepository.updatePaymentStatus(paidMsg._id.toString(), 'paid');
+            await paidLiveMessageRepository.updatePaymentStatus(paidMsg._id.toString(), 'paid');
+        }
 
         try {
             const customerToken = user.safepayCustomerToken;
@@ -120,10 +130,11 @@ export const liveMessageService = {
             id: paidMsg._id.toString(),
             source: 'commons',
             type: 'paid',
+            senderId: user._id.toString(),
             senderName: user.displayName,
             senderAvatar: user.avatarUrl || null,
             message: paidMsg.message,
-            amountPKR: paidMsg.amountPKR,
+            amountPKR: SubscriptionService.calculateFees(paidMsg.amountPKR).net,
             tier: paidMsg.tier,
             bgColor: paidMsg.bgColor,
             headerColor: paidMsg.headerColor,
@@ -142,6 +153,11 @@ export const liveMessageService = {
         if (!session) throw createError.notFound('Session not found');
         if (session.status !== 'live') throw createError.invalidInput('Session is not live');
 
+        const mute = await ChatMute.findOne({ sessionId: session._id, userId: user._id });
+        if (mute && mute.mutedUntil > new Date()) {
+            throw createError.forbidden(`You are in timeout until ${mute.mutedUntil.toLocaleTimeString()}`);
+        }
+
         const chatMsg = await liveChatMessageRepository.create({
             sessionId: session._id,
             senderId: user._id,
@@ -154,6 +170,7 @@ export const liveMessageService = {
             id: chatMsg._id.toString(),
             source: 'commons',
             type: 'free',
+            senderId: user._id.toString(),
             senderName: user.displayName,
             senderAvatar: user.avatarUrl || null,
             message: chatMsg.message,

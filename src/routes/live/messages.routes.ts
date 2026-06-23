@@ -17,5 +17,7 @@ router.post('/sessions/:sessionId/messages/:msgId/refund', protect, messagesCont
 
 // Free Chat
 router.post('/sessions/:sessionId/chat', protect, validate(chatMessageSchema), messagesController.sendChatMessage as RequestHandler);
+router.delete('/sessions/:sessionId/chat/:msgId', protect, messagesController.deleteChatMessage as RequestHandler);
+router.post('/sessions/:sessionId/chat/timeout/:userId', protect, express.json(), messagesController.timeoutUser as RequestHandler);
 
 export default router;

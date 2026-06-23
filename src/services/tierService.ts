@@ -4,7 +4,8 @@ import { creatorPageRepository } from '../repositories/creatorPageRepository.js'
 import { createError } from '../middleware/errorHandler.js';
 import { Types } from 'mongoose';
 
-import { getOrCreateSafepayCustomer, createTracker, getAuthToken, createSafepayPlan } from './safepayService.js';
+import { getOrCreateSafepayCustomer, createTracker, getAuthToken, createSafepayPlan, getSafepayTrackerStatus } from './safepayService.js';
+import { SubscriptionService } from './subscriptionService.js';
 
 
 interface CreatePlanInput {
@@ -190,6 +191,26 @@ export class TierService {
 
         if (!pendingSub) {
             throw createError.notFound('Subscription');
+        }
+
+        if (pendingSub.status === 'incomplete' && tracker) {
+            const status = await getSafepayTrackerStatus(tracker);
+            if (status?.data?.state === 'TRACKER_ENDED') {
+                const priceToCharge = pendingSub.interval === 'YEARLY' ? plan.price * 12 : plan.price;
+                await SubscriptionService.activateSubscription({
+                    subscriptionId: pendingSub._id.toString(),
+                    userId: pendingSub.userId.toString(),
+                    creatorId: plan.creatorId.toString(),
+                    pageId: plan.pageId.toString(),
+                    planId: plan._id.toString(),
+                    tierName: plan.name,
+                    interval: (pendingSub.interval || 'MONTHLY') as 'MONTHLY' | 'YEARLY',
+                    price: priceToCharge
+                });
+                pendingSub.status = 'active';
+            } else {
+                throw createError.invalidInput('Payment not completed');
+            }
         }
 
         return pendingSub;

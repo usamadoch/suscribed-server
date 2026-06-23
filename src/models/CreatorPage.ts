@@ -106,6 +106,11 @@ const creatorPageSchema = new Schema<ICreatorPageDocument>(
             default: 0,
             min: 0,
         },
+        activeLiveSessionId: {
+            type: Schema.Types.ObjectId,
+            ref: 'LiveSession',
+            default: null,
+        },
     },
     {
         timestamps: true,

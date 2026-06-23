@@ -1,12 +1,15 @@
 import LiveSession from '../models/LiveSession.js';
 import Member from '../models/Member.js';
 import CreatorPage from '../models/CreatorPage.js';
+import PaidLiveMessage from '../models/PaidLiveMessage.js';
+import mongoose from 'mongoose';
 import { ILiveSessionDocument } from '../models/LiveSession.js';
 import { createError } from '../middleware/errorHandler.js';
 import { liveSessionRepository } from '../repositories/liveSession.repository.js';
 import { superChatTierRepository } from '../repositories/superChatTier.repository.js';
 import { youtubeIntegration } from '../integrations/youtube.js';
 import { getOrCreateSafepayCustomer, getSavedPaymentMethod } from './safepayService.js';
+import { SubscriptionService } from './subscriptionService.js';
 import { Server as SocketIOServer } from 'socket.io';
 
 // ============================================================================
@@ -130,7 +133,7 @@ export const liveSessionService = {
                 if (!activeMembership) {
                     throw createError.forbidden('Members only. Join this creator to access this live session.');
                 }
-                
+
                 hasAccess = true;
             }
         }
@@ -142,6 +145,7 @@ export const liveSessionService = {
         if (creatorPage) {
             response.creatorId = {
                 _id: creatorPage._id.toString(),
+                userId: creatorId,
                 displayName: creatorPage.displayName,
                 pageSlug: creatorPage.pageSlug,
                 avatarUrl: creatorPage.avatarUrl
@@ -155,7 +159,7 @@ export const liveSessionService = {
         const existingSession = await liveSessionRepository.findActiveSessionByCreatorId(creatorId);
         if (existingSession) throw createError.invalidInput('An active live session already exists');
 
-        const youtubeLiveChatId = data.youtubeVideoId 
+        const youtubeLiveChatId = data.youtubeVideoId
             ? await youtubeIntegration.fetchYouTubeLiveChatId(data.youtubeVideoId)
             : undefined;
 
@@ -171,6 +175,8 @@ export const liveSessionService = {
             youtubeIntegration.startYouTubePolling(io, session._id.toString(), session.youtubeLiveChatId);
         }
 
+        await CreatorPage.updateOne({ userId: creatorId }, { activeLiveSessionId: session._id });
+
         return session;
     },
 
@@ -179,6 +185,90 @@ export const liveSessionService = {
         if (!session) throw createError.notFound('Session not found');
         if (session.creatorId.toString() !== creatorId) throw createError.forbidden('Unauthorized to access this session');
         return session;
+    },
+
+    async listSessions(creatorId: string) {
+        const sessions = await liveSessionRepository.findSessionsByCreatorId(creatorId);
+
+        const sessionIds = sessions.map(s => s._id);
+        const stats = await PaidLiveMessage.aggregate([
+            { $match: { sessionId: { $in: sessionIds }, paymentStatus: 'paid' } },
+            { $group: { _id: '$sessionId', totalCollected: { $sum: '$amountPKR' }, totalPaidMessages: { $sum: 1 } } }
+        ]);
+
+        const statsMap = new Map(stats.map(s => [s._id.toString(), s]));
+
+        return sessions.map(session => {
+            const sessionStats = statsMap.get(session._id.toString());
+            let collected = 0;
+            let paidMsgs = 0;
+
+            if (sessionStats) {
+                const { net } = SubscriptionService.calculateFees(sessionStats.totalCollected);
+                collected = net;
+                paidMsgs = sessionStats.totalPaidMessages;
+            }
+
+            return {
+                ...((session as any).toObject ? (session as any).toObject() : session),
+                totalCollected: collected,
+                totalPaidMessages: paidMsgs
+            };
+        });
+    },
+
+    async deleteSession(sessionId: string, creatorId: string) {
+        const session = await liveSessionRepository.findById(sessionId);
+        if (!session) throw createError.notFound('Session not found');
+        if (session.creatorId.toString() !== creatorId) throw createError.forbidden('Unauthorized to delete this session');
+        
+        await liveSessionRepository.deleteSessionById(sessionId);
+        return { success: true };
+    },
+
+    async getSessionStats(sessionId: string, creatorId: string, io: SocketIOServer) {
+        const session = await liveSessionRepository.findById(sessionId);
+        if (!session) throw createError.notFound('Session not found');
+        if (session.creatorId.toString() !== creatorId) throw createError.forbidden('Unauthorized to access this session');
+
+        const sockets = await io.in(`live:${sessionId}`).fetchSockets();
+        const watchingCount = sockets.length;
+
+        const topSupportersAggregation = await PaidLiveMessage.aggregate([
+            { $match: { sessionId: new mongoose.Types.ObjectId(sessionId), paymentStatus: 'paid' } },
+            { $group: { _id: '$senderId', name: { $first: '$senderName' }, amount: { $sum: '$amountPKR' } } },
+            { $sort: { amount: -1 } },
+            { $limit: 10 }
+        ]);
+
+        const topSupporters = topSupportersAggregation.map((supporter, index) => {
+            const { net } = SubscriptionService.calculateFees(supporter.amount);
+            return {
+                rank: index + 1,
+                name: supporter.name,
+                amount: `Rs ${net.toLocaleString()}`
+            };
+        });
+
+        const totalStats = await PaidLiveMessage.aggregate([
+            { $match: { sessionId: new mongoose.Types.ObjectId(sessionId), paymentStatus: 'paid' } },
+            { $group: { _id: null, totalCollected: { $sum: '$amountPKR' }, totalPaidMessages: { $sum: 1 } } }
+        ]);
+
+        let collected = 0;
+        let paidMsgs = 0;
+        if (totalStats.length > 0) {
+            const { net } = SubscriptionService.calculateFees(totalStats[0].totalCollected);
+            collected = net;
+            paidMsgs = totalStats[0].totalPaidMessages;
+        }
+
+        return {
+            collected,
+            paidMsgs,
+            watching: watchingCount,
+            topSupporters
+        };
     },
 
     async startLive(sessionId: string, creatorId: string, io: SocketIOServer) {
@@ -190,6 +280,8 @@ export const liveSessionService = {
         if (session.mergeYouTubeChat && session.youtubeLiveChatId) {
             youtubeIntegration.startYouTubePolling(io, sessionId, session.youtubeLiveChatId);
         }
+
+        await CreatorPage.updateOne({ userId: creatorId }, { activeLiveSessionId: sessionId });
 
         return session;
     },
@@ -203,6 +295,8 @@ export const liveSessionService = {
         const updated = await liveSessionRepository.updateStatus(sessionId, 'ended', new Date());
         youtubeIntegration.stopYouTubePolling(sessionId);
 
+        await CreatorPage.updateOne({ userId: creatorId }, { activeLiveSessionId: null });
+
         io.to(`live:${sessionId}`).emit('session.ended', { sessionId });
         return updated;
     },
@@ -215,7 +309,7 @@ export const liveSessionService = {
         const customerToken = await getOrCreateSafepayCustomer(user);
         const { getWallet } = await import('./safepayService.js');
         const wallet = await getWallet(customerToken);
-        
+
         if (wallet && wallet.length > 0) {
             const sorted = wallet.sort((a: any, b: any) => b.created_at.seconds - a.created_at.seconds);
             const methods = sorted.map((method: any) => {

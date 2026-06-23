@@ -18,6 +18,7 @@ export interface CommonsLiveMessage {
     id: string;
     source: 'commons';
     type: 'free' | 'paid';
+    senderId: string;
     senderName: string;
     senderAvatar?: string | null;
     message: string;
@@ -44,4 +45,10 @@ export function appendToChatHistory(sessionId: string, messages: ChatHistoryMess
     const existing = liveChatHistory.get(sessionId) || [];
     const merged = [...existing, ...messages];
     liveChatHistory.set(sessionId, merged.slice(-MAX_CHAT_HISTORY));
+}
+
+export function removeMessageFromHistory(sessionId: string, msgId: string): void {
+    const existing = liveChatHistory.get(sessionId) || [];
+    const filtered = existing.filter(msg => msg.id !== msgId);
+    liveChatHistory.set(sessionId, filtered);
 }

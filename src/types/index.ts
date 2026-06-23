@@ -106,6 +106,7 @@ export interface ICreatorPage {
     isPublic: boolean;
     memberCount: number;
     postCount: number;
+    activeLiveSessionId?: Types.ObjectId | null;
     status: 'draft' | 'published';
     createdAt: Date;
     updatedAt: Date;
@@ -480,7 +481,7 @@ export * from './analytics.js';
 
 // Transaction types
 export type TransactionStatus = 'pending' | 'available' | 'refunded' | 'paid' | 'completed' | 'failed';
-export type TransactionType = 'subscription' | 'refund';
+export type TransactionType = 'subscription' | 'refund' | 'superchat';
 
 export interface ITransaction {
     _id: Types.ObjectId;

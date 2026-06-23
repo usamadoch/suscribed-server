@@ -19,5 +19,13 @@ export const liveSessionRepository = {
             { status, endedAt },
             { new: true }
         );
+    },
+
+    async findSessionsByCreatorId(creatorId: string): Promise<ILiveSessionDocument[]> {
+        return LiveSession.find({ creatorId }).sort({ createdAt: -1 });
+    },
+
+    async deleteSessionById(sessionId: string): Promise<ILiveSessionDocument | null> {
+        return LiveSession.findByIdAndDelete(sessionId);
     }
 };

@@ -22,7 +22,7 @@ const transactionSchema = new Schema<ITransactionDocument>(
         },
         type: {
             type: String,
-            enum: ['subscription', 'refund'] as TransactionType[],
+            enum: ['subscription', 'refund', 'superchat'] as TransactionType[],
             required: true,
         },
         gross: {

@@ -14,12 +14,29 @@ export const createSession = async (req: AuthenticatedRequest, res: Response, ne
     }
 };
 
-export const listSessions: RequestHandler = (req, res) => { res.status(200).json({ message: 'ok' }); };
+export const listSessions = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const sessions = await liveSessionService.listSessions(req.user._id.toString());
+        res.status(200).json({ success: true, data: sessions });
+    } catch (error) {
+        next(error);
+    }
+};
 
 export const getSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
         const session = await liveSessionService.getSessionForControl(req.params.sessionId as string, req.user._id.toString());
         res.status(200).json({ success: true, data: session });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const getSessionStats = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const io: SocketIOServer = req.app.get('io');
+        const stats = await liveSessionService.getSessionStats(req.params.sessionId as string, req.user._id.toString(), io);
+        res.status(200).json({ success: true, data: stats });
     } catch (error) {
         next(error);
     }
@@ -47,7 +64,14 @@ export const endLive = async (req: AuthenticatedRequest, res: Response, next: Ne
     }
 };
 
-export const deleteSession: RequestHandler = (req, res) => { res.status(200).json({ message: 'ok' }); };
+export const deleteSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        await liveSessionService.deleteSession(String(req.params.sessionId), req.user._id.toString());
+        res.status(200).json({ success: true, message: 'Session deleted successfully' });
+    } catch (error) {
+        next(error);
+    }
+};
 export const detectActiveBroadcast: RequestHandler = (req, res) => { res.status(200).json({ message: 'ok' }); };
 
 export const validateYouTubeUrl: RequestHandler = async (req, res, next) => {

@@ -9,7 +9,7 @@ export const pageService = {
     async getPublicPages() {
         const pages = await creatorPageRepository.find(
             { isPublic: true, status: 'published' },
-            'pageSlug displayName tagline avatarUrl memberCount postCount',
+            'pageSlug displayName tagline avatarUrl memberCount postCount activeLiveSessionId',
             { memberCount: -1, createdAt: -1 },
             50
         );
@@ -93,6 +93,7 @@ export const pageService = {
                     bannerUrl: page.bannerUrl,
                     memberCount: page.memberCount,
                     isPublic: page.isPublic,
+                    activeLiveSessionId: page.activeLiveSessionId,
                 },
                 isOwner: false,
                 isMember: false,

@@ -1,11 +1,15 @@
 import { subscriptionRepository } from '../repositories/subscriptionRepository.js';
 import { userRepository } from '../repositories/userRepository.js';
 import { tierRepository } from '../repositories/tierRepository.js';
+import { transactionRepository } from '../repositories/transactionRepository.js';
 import { SubscriptionService } from './subscriptionService.js';
-import PaidLiveMessage from '../models/PaidLiveMessage.js';
+import PaidLiveMessage, { IPaidLiveMessageDocument } from '../models/PaidLiveMessage.js';
+import CreatorPage from '../models/CreatorPage.js';
+import LiveSession from '../models/LiveSession.js';
+import { appendToChatHistory } from '../controllers/live/shared.js';
 
 export const webhookService = {
-    async processPaymentSucceeded(tracker: any) {
+    async processPaymentSucceeded(tracker: any, io?: any) {
         const safepayTrackerId = tracker.tracker;
 
         console.log(`[Webhook] Tokenization/Auth complete for tracker: ${safepayTrackerId}`);
@@ -32,8 +36,7 @@ export const webhookService = {
             if (paidMsg) {
                 if (paidMsg.paymentStatus === 'pending') {
                     console.log(`[Webhook] Found pending Super Chat for tracker ${safepayTrackerId}, updating to paid`);
-                    paidMsg.paymentStatus = 'paid';
-                    await paidMsg.save();
+                    await webhookService.activateSuperChat(paidMsg, safepayTrackerId, io);
                 } else {
                     console.log(`[Webhook] Ignored: Super Chat already processed for tracker ${safepayTrackerId}`);
                 }
@@ -96,6 +99,69 @@ export const webhookService = {
                 createdAt: new Date().toISOString()
             };
             console.error(`[CRITICAL_RECONCILIATION_ERROR] Charge succeeded but DB write failed. Data: ${JSON.stringify(payload)} Error:`, dbErr);
+        }
+    },
+
+    async activateSuperChat(paidMsg: IPaidLiveMessageDocument, trackerId: string, io?: any) {
+        paidMsg.paymentStatus = 'paid';
+        await paidMsg.save();
+
+        try {
+            const creatorPage = await CreatorPage.findOne({ userId: paidMsg.creatorId });
+            if (!creatorPage) {
+                console.error(`[Webhook] CreatorPage not found for creatorId ${paidMsg.creatorId}`);
+                return;
+            }
+
+            const { gross, platformFee, net } = SubscriptionService.calculateFees(paidMsg.amountPKR);
+            
+            const releaseAt = new Date();
+            releaseAt.setDate(releaseAt.getDate() + 14);
+
+            await Promise.all([
+                transactionRepository.create({
+                    userId: paidMsg.senderId,
+                    creatorId: paidMsg.creatorId,
+                    pageId: creatorPage._id,
+                    type: 'superchat',
+                    gross,
+                    platformFee,
+                    net,
+                    status: 'completed',
+                    releaseAt,
+                    description: `Super Chat from ${paidMsg.senderName || 'User'} - Tier ${paidMsg.tierLabel}`,
+                }),
+                LiveSession.findByIdAndUpdate(paidMsg.sessionId, {
+                    $inc: { totalCollected: net, totalPaidMessages: 1 }
+                })
+            ]);
+
+            console.log(`[Webhook] Successfully activated Super Chat ${paidMsg._id}`);
+
+            if (io) {
+                const user = await userRepository.findById(paidMsg.senderId);
+                const payload = {
+                    id: paidMsg._id.toString(),
+                    source: 'commons',
+                    type: 'paid',
+                    senderName: user?.displayName || paidMsg.senderName,
+                    senderAvatar: user?.avatarUrl || null,
+                    message: paidMsg.message,
+                    amountPKR: net,
+                    tier: paidMsg.tier,
+                    bgColor: paidMsg.bgColor,
+                    headerColor: paidMsg.headerColor,
+                    textColor: paidMsg.textColor,
+                    isPinned: false,
+                    isHearted: false,
+                    timestamp: new Date(),
+                };
+
+                io.to(`live:${paidMsg.sessionId}`).emit('chat_message.new', { message: payload });
+                appendToChatHistory(paidMsg.sessionId.toString(), [payload as any]);
+            }
+        } catch (err) {
+            console.error(`[CRITICAL_RECONCILIATION_ERROR] Super Chat charge succeeded but DB write failed. Tracker: ${trackerId}`, err);
         }
     }
 };

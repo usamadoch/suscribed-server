@@ -13,6 +13,7 @@ router.get('/sessions/superchat-tiers', sessionsController.getSuperChatTiers as 
 router.get('/safepay/wallet-status', protect, sessionsController.getWalletStatus as RequestHandler);
 router.get('/sessions/:sessionId', optionalAuth, sessionsController.getPublicSession as RequestHandler);
 router.get('/sessions/:sessionId/control', protect, sessionsController.getSession as RequestHandler);
+router.get('/sessions/:sessionId/stats', protect, sessionsController.getSessionStats as RequestHandler);
 router.patch('/sessions/:sessionId', protect, sessionsController.updateSession as RequestHandler);
 router.post('/sessions/:sessionId/start', protect, sessionsController.startLive as RequestHandler);
 router.post('/sessions/:sessionId/end', protect, sessionsController.endLive as RequestHandler);

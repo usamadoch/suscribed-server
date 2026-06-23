@@ -6,6 +6,7 @@ export interface ILiveChatMessage {
     senderName: string;
     senderAvatar?: string | null;
     message: string;
+    isHidden: boolean;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -36,6 +37,10 @@ const liveChatMessageSchema = new Schema<ILiveChatMessageDocument>(
             type: String,
             required: true,
             maxlength: 196,
+        },
+        isHidden: {
+            type: Boolean,
+            default: false,
         },
     },
     {

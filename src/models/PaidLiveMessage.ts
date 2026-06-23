@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IPaidLiveMessage {
     sessionId: mongoose.Types.ObjectId;
     creatorId: mongoose.Types.ObjectId;
-    senderId?: mongoose.Types.ObjectId;
+    senderId: mongoose.Types.ObjectId;
     senderName?: string;
     senderEmail?: string;
     message: string;
@@ -42,7 +42,7 @@ const paidLiveMessageSchema = new Schema<IPaidLiveMessageDocument>(
         senderId: {
             type: Schema.Types.ObjectId,
             ref: 'User',
-            default: null,
+            required: true,
         },
         senderName: {
             type: String,

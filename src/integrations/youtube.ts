@@ -1,5 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { activePollingTimeouts, pollingPageTokens, liveChatHistory, appendToChatHistory, LiveMessage } from '../controllers/live/shared.js';
+import { createError } from '../middleware/errorHandler.js';
 
 export const youtubeIntegration = {
     startYouTubePolling(io: SocketIOServer, sessionId: string, liveChatId: string): void {
@@ -91,7 +92,7 @@ export const youtubeIntegration = {
     async validateYouTubeUrl(url: string) {
         const videoId = this.getYoutubeId(url);
         if (!videoId || videoId.length !== 11) {
-            throw new Error('Invalid YouTube URL or Video ID');
+            throw createError.invalidInput('Invalid YouTube URL or Video ID');
         }
 
         const apiKey = process.env.YOUTUBE_API_KEY || process.env.GOOGLE_API_KEY;
@@ -104,14 +105,14 @@ export const youtubeIntegration = {
         );
 
         if (!apiRes.ok) {
-            throw new Error('Failed to fetch video details from YouTube');
+            throw createError.server('Failed to fetch video details from YouTube');
         }
 
         const data: any = await apiRes.json();
         const item = data.items?.[0];
 
         if (!item) {
-            throw new Error('YouTube video not found');
+            throw createError.notFound('YouTube video');
         }
 
         const liveStreamingDetails = item.liveStreamingDetails;

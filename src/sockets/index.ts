@@ -4,6 +4,7 @@ import config from '../config/index.js';
 import { JWTPayload } from '../types/index.js';
 import User from '../models/User.js';
 import { getLiveChatHistory } from '../controllers/live/shared.js';
+import LiveSession from '../models/LiveSession.js';
 
 interface SocketUser {
     id: string;
@@ -125,9 +126,19 @@ export const initializeSockets = (io: SocketIOServer): void => {
         });
 
         // Join live session room (works for both authenticated and anonymous sockets)
-        socket.on('join_session', ({ sessionId }: { sessionId: string }) => {
+        socket.on('join_session', async ({ sessionId }: { sessionId: string }) => {
             socket.join(`live:${sessionId}`);
             console.log(`Socket ${socket.id} joined live:${sessionId}`);
+
+            try {
+                const roomSockets = await io.in(`live:${sessionId}`).fetchSockets();
+                await LiveSession.updateOne(
+                    { _id: sessionId, status: 'live' },
+                    { $max: { peakViewerCount: roomSockets.length } }
+                );
+            } catch (error) {
+                console.error('Failed to update peak viewer count', error);
+            }
 
             // Send cached chat history to this socket only (not the whole room)
             const history = getLiveChatHistory(sessionId);

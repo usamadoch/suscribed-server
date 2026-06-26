@@ -145,7 +145,6 @@ export const liveSessionService = {
         if (creatorPage) {
             response.creatorId = {
                 _id: creatorPage._id.toString(),
-                userId: creatorId,
                 displayName: creatorPage.displayName,
                 pageSlug: creatorPage.pageSlug,
                 avatarUrl: creatorPage.avatarUrl
@@ -267,6 +266,8 @@ export const liveSessionService = {
             collected,
             paidMsgs,
             watching: watchingCount,
+            peakViewers: session.peakViewerCount,
+            status: session.status,
             topSupporters
         };
     },

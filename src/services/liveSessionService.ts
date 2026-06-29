@@ -24,6 +24,7 @@ export interface PublicLiveSessionResponse {
     _id: string;
     creatorId: string | {
         _id: string;
+        userId: string;
         displayName: string;
         pageSlug: string;
         avatarUrl?: string | null;
@@ -140,11 +141,11 @@ export const liveSessionService = {
 
         const response = sanitizeSessionForPublic(sessionDoc, hasAccess);
 
-        // Populate CreatorPage details for the frontend
         const creatorPage = await CreatorPage.findOne({ userId: creatorId }, '_id displayName pageSlug avatarUrl').lean();
         if (creatorPage) {
             response.creatorId = {
                 _id: creatorPage._id.toString(),
+                userId: creatorId,
                 displayName: creatorPage.displayName,
                 pageSlug: creatorPage.pageSlug,
                 avatarUrl: creatorPage.avatarUrl

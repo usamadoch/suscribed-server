@@ -46,8 +46,6 @@ export const webhookService = {
             return;
         }
 
-        console.log(`[Webhook] Milestone 1: Found incomplete subscription ${pendingSub._id}`);
-
         // Find the user
         const user = await userRepository.findById(pendingSub.userId);
         if (!user) {
@@ -55,17 +53,11 @@ export const webhookService = {
             return;
         }
 
-        console.log(`[Webhook] Milestone 2: Found user ${user.email} (${user._id})`);
-
         const cardToken = tracker?.action?.payment_method?.token;
-        if (!cardToken) {
-            console.error(`[Webhook] No card token in payload — log full tracker:`, JSON.stringify(tracker));
-        }
 
         // Save card token to user for future unscheduled_cof charges
         if (cardToken) {
             await userRepository.updateById(user._id, { safepayPaymentMethodToken: cardToken });
-            console.log(`[Webhook] Saved card token ${cardToken} for user ${user.email}`);
         }
 
         const plan = await tierRepository.findById(pendingSub.planId);
@@ -73,8 +65,6 @@ export const webhookService = {
             console.error(`[Webhook] Tier not found for planId ${pendingSub.planId}`);
             return;
         }
-
-        console.log(`[Webhook] Milestone 5: Found Tier ${plan.name} at price ${plan.price}`);
 
         const priceToCharge = pendingSub.interval === 'YEARLY' ? plan.price * 12 : plan.price;
 
@@ -90,7 +80,7 @@ export const webhookService = {
                 price: priceToCharge
             });
 
-            console.log(`[Webhook] Milestone 9: Successfully activated subscription for user ${user.email} on tier ${plan.name}`);
+            console.log(`[Webhook] Successfully activated subscription for user ${user.email} on tier ${plan.name}`);
         } catch (dbErr) {
             const payload = {
                 userId: user._id,
@@ -100,6 +90,86 @@ export const webhookService = {
             };
             console.error(`[CRITICAL_RECONCILIATION_ERROR] Charge succeeded but DB write failed. Data: ${JSON.stringify(payload)} Error:`, dbErr);
         }
+    },
+
+    /**
+     * Handle payment.failed and subscription.payment.failed events.
+     * Marks incomplete subscriptions as canceled and pending Super Chats as failed.
+     */
+    async processPaymentFailed(tracker: any) {
+        const safepayTrackerId = tracker?.tracker;
+        if (!safepayTrackerId) {
+            console.warn('[Webhook] payment.failed event with no tracker ID');
+            return;
+        }
+
+        console.log(`[Webhook] Payment failed for tracker: ${safepayTrackerId}`);
+
+        // Check if it's a subscription payment
+        const pendingSub = await subscriptionRepository.findOne({
+            safepaySubscriptionId: safepayTrackerId,
+            status: 'incomplete'
+        });
+
+        if (pendingSub) {
+            await subscriptionRepository.updateById(pendingSub._id, { status: 'canceled' });
+            console.log(`[Webhook] Marked incomplete subscription ${pendingSub._id} as canceled due to payment failure`);
+
+            // Record the failed transaction for creator visibility
+            const plan = await tierRepository.findById(pendingSub.planId);
+            if (plan) {
+                const priceToCharge = pendingSub.interval === 'YEARLY' ? plan.price * 12 : plan.price;
+                await SubscriptionService.recordSubscriptionFailure({
+                    userId: pendingSub.userId,
+                    creatorId: plan.creatorId,
+                    pageId: plan.pageId,
+                    tierName: plan.name,
+                    price: priceToCharge
+                });
+            }
+            return;
+        }
+
+        // Check if it's a Super Chat payment
+        const paidMsg = await PaidLiveMessage.findOne({ paymentId: safepayTrackerId, paymentStatus: 'pending' });
+        if (paidMsg) {
+            paidMsg.paymentStatus = 'failed';
+            await paidMsg.save();
+            console.log(`[Webhook] Marked pending Super Chat ${paidMsg._id} as failed`);
+        }
+    },
+
+    /**
+     * Handle subscription.canceled and subscription.ended events.
+     * Marks active subscriptions as canceled and decrements subscriber count.
+     */
+    async processSubscriptionEnded(tracker: any) {
+        const safepayTrackerId = tracker?.tracker || tracker?.subscription;
+        if (!safepayTrackerId) {
+            console.warn('[Webhook] subscription.canceled/ended event with no tracker ID');
+            return;
+        }
+
+        console.log(`[Webhook] Subscription ended/canceled for: ${safepayTrackerId}`);
+
+        const sub = await subscriptionRepository.findOne({
+            safepaySubscriptionId: safepayTrackerId,
+            status: 'active'
+        });
+
+        if (!sub) {
+            console.log(`[Webhook] No active subscription found for ${safepayTrackerId}`);
+            return;
+        }
+
+        await subscriptionRepository.updateById(sub._id, {
+            status: 'canceled',
+            canceledAt: new Date()
+        });
+
+        // Decrement the tier's active subscriber count
+        await tierRepository.updateById(sub.planId, { $inc: { activeSubscribers: -1 } });
+        console.log(`[Webhook] Canceled subscription ${sub._id} and decremented subscriber count`);
     },
 
     async activateSuperChat(paidMsg: IPaidLiveMessageDocument, trackerId: string, io?: any) {

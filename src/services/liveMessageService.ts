@@ -8,6 +8,7 @@ import { createTracker, getAuthToken, getSafepayTrackerStatus, getOrCreateSafepa
 import { appendToChatHistory, CommonsLiveMessage } from '../controllers/live/shared.js';
 import { createError } from '../middleware/errorHandler.js';
 import { SubscriptionService } from './subscriptionService.js';
+import { creatorPageRepository } from '../repositories/creatorPageRepository.js';
 
 export const liveMessageService = {
     async initiatePaidMessage(sessionId: string, amount: number, message: string, user: any) {
@@ -92,7 +93,7 @@ export const liveMessageService = {
             senderName: user.displayName,
             senderAvatar: user.avatarUrl || null,
             message: paidMsg.message,
-            amountPKR: SubscriptionService.calculateFees(paidMsg.amountPKR).net,
+            amountPKR: paidMsg.amountPKR,
             tier: paidMsg.tier,
             bgColor: paidMsg.bgColor,
             headerColor: paidMsg.headerColor,
@@ -134,7 +135,7 @@ export const liveMessageService = {
             senderName: user.displayName,
             senderAvatar: user.avatarUrl || null,
             message: paidMsg.message,
-            amountPKR: SubscriptionService.calculateFees(paidMsg.amountPKR).net,
+            amountPKR: paidMsg.amountPKR,
             tier: paidMsg.tier,
             bgColor: paidMsg.bgColor,
             headerColor: paidMsg.headerColor,
@@ -158,11 +159,22 @@ export const liveMessageService = {
             throw createError.forbidden(`You are in timeout until ${mute.mutedUntil.toLocaleTimeString()}`);
         }
 
+        let finalSenderName = user.displayName;
+        let finalSenderAvatar = user.avatarUrl || null;
+
+        if (session.creatorId) {
+            const creatorPage = await creatorPageRepository.findOne({ _id: session.creatorId, userId: user._id }).lean();
+            if (creatorPage) {
+                finalSenderName = creatorPage.displayName;
+                finalSenderAvatar = creatorPage.avatarUrl || null;
+            }
+        }
+
         const chatMsg = await liveChatMessageRepository.create({
             sessionId: session._id,
             senderId: user._id,
-            senderName: user.displayName,
-            senderAvatar: user.avatarUrl || null,
+            senderName: finalSenderName,
+            senderAvatar: finalSenderAvatar,
             message: message.trim(),
         });
 
@@ -171,8 +183,8 @@ export const liveMessageService = {
             source: 'commons',
             type: 'free',
             senderId: user._id.toString(),
-            senderName: user.displayName,
-            senderAvatar: user.avatarUrl || null,
+            senderName: finalSenderName,
+            senderAvatar: finalSenderAvatar,
             message: chatMsg.message,
             amountPKR: 0,
             tier: 0,

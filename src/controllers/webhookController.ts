@@ -24,7 +24,6 @@ const verifyHmac = (rawBody: Buffer, signature: string): boolean => {
 
 export const handleSafepayWebhook = async (req: Request, res: Response): Promise<void> => {
 
-    console.log("[Webhook] Safepay headers:", JSON.stringify(req.headers, null, 2));
     const signature = req.headers['x-sfpy-signature'] as string | undefined;
 
     if (!signature) {
@@ -48,12 +47,48 @@ export const handleSafepayWebhook = async (req: Request, res: Response): Promise
             const event = JSON.parse((req.body as Buffer).toString());
             const tracker = event.data;
 
-            console.log(`[Webhook] Safepay event: ${event.type}`, JSON.stringify(tracker, null, 2));
+            console.log(`[Webhook] Safepay event: ${event.type}`);
 
             switch (event.type) {
+                // ─── One-time & first-payment success ────────────────────
                 case 'payment.succeeded': {
                     const io = req.app.get('io');
                     await webhookService.processPaymentSucceeded(tracker, io);
+                    break;
+                }
+
+                // ─── Payment failure (card declined, expired, etc.) ──────
+                case 'payment.failed': {
+                    await webhookService.processPaymentFailed(tracker);
+                    break;
+                }
+
+                // ─── Subscription lifecycle events ───────────────────────
+                case 'subscription.canceled':
+                case 'subscription.ended': {
+                    await webhookService.processSubscriptionEnded(tracker);
+                    break;
+                }
+
+                case 'subscription.paused': {
+                    console.log(`[Webhook] Subscription paused: ${tracker?.tracker || 'unknown'}`);
+                    break;
+                }
+
+                case 'subscription.resumed': {
+                    console.log(`[Webhook] Subscription resumed: ${tracker?.tracker || 'unknown'}`);
+                    break;
+                }
+
+                // ─── Recurring payment events ────────────────────────────
+                case 'subscription.payment.succeeded': {
+                    const io = req.app.get('io');
+                    await webhookService.processPaymentSucceeded(tracker, io);
+                    break;
+                }
+
+                case 'subscription.payment.failed': {
+                    await webhookService.processPaymentFailed(tracker);
                     break;
                 }
 

@@ -39,5 +39,5 @@ seedTiers();
 
 
 
-
+// npx tsx src/scripts/seedSuperChatTiers.ts
 

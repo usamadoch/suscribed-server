@@ -1,5 +1,6 @@
 import { memberRepository } from '../repositories/memberRepository.js';
 import { creatorPageRepository } from '../repositories/creatorPageRepository.js';
+import { tierRepository } from '../repositories/tierRepository.js';
 import { NotificationService } from './notificationService.js';
 import { createError } from '../middleware/errorHandler.js';
 import { IMemberDocument } from '../models/Member.js';
@@ -24,6 +25,12 @@ export class MemberService {
         const page = await creatorPageRepository.findById(pageId);
         if (!page) {
             throw createError.notFound('Page not found');
+        }
+
+        // Validate that the creator does not have mandatory paid tiers
+        const publishedTiers = await tierRepository.findPublishedByCreatorId(creatorId);
+        if (publishedTiers && publishedTiers.length > 0) {
+            throw createError.forbidden('Creator requires a paid subscription to join.');
         }
 
         // Check if already a member

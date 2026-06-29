@@ -175,22 +175,26 @@ export class TierService {
 
         let pendingSub;
         if (tracker) {
+            // Strictly require the tracker to match the subscription for THIS plan
             pendingSub = await subscriptionRepository.findOne({
                 userId,
                 planId: plan._id,
                 safepaySubscriptionId: tracker,
             });
-        }
 
-        if (!pendingSub) {
+            if (!pendingSub) {
+                throw createError.notFound('Subscription for this plan with the provided tracker was not found');
+            }
+        } else {
+            // Only fallback to most recent if polling status without a tracker
             pendingSub = await subscriptionRepository.findOne(
                 { userId, planId: plan._id },
                 { createdAt: -1 }
             );
-        }
 
-        if (!pendingSub) {
-            throw createError.notFound('Subscription');
+            if (!pendingSub) {
+                throw createError.notFound('Subscription');
+            }
         }
 
         if (pendingSub.status === 'incomplete' && tracker) {

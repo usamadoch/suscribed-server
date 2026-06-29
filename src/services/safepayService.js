@@ -23,7 +23,7 @@ const createSafepayPlan = async (name, amount, interval = "MONTH", interval_coun
             "X-SFPY-MERCHANT-SECRET": process.env.SAFEPAY_SECRET_KEY,
         },
         body: JSON.stringify({
-            amount: amount.toString(),
+            amount: (amount * 100).toString(),
             currency: "PKR",
             interval,
             type: "RECURRING",
@@ -46,43 +46,39 @@ const createSafepayPlan = async (name, amount, interval = "MONTH", interval_coun
  */
 const createTracker = async (amount, planId, customerToken, currency = "PKR", options = {}) => {
     const { mode = "instrument", entry_mode = null } = options;
-    // console.log(`[Safepay] createTracker: amount=${amount}, customerToken=${customerToken}, mode=${mode}, entry_mode=${entry_mode}`);
+
+    const body = {
+        merchant_api_key: process.env.SAFEPAY_API_KEY,
+        intent: "CYBERSOURCE",
+        user: customerToken,
+        mode: mode,
+        entry_mode: entry_mode,
+        currency,
+        amount: amount * 100,
+    };
+
+    // Link plan to tracker for subscription trackers
+    if (planId) {
+        body.plan_id = planId;
+    }
+
     const res = await fetch(`${HOST}/order/payments/v3/`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
             "X-SFPY-MERCHANT-SECRET": process.env.SAFEPAY_SECRET_KEY,
         },
-        body: JSON.stringify({
-            // client: process.env.SAFEPAY_API_KEY,   // public key (sec_xxx)
-            // environment: ENV,
-            merchant_api_key: process.env.SAFEPAY_API_KEY,
-            intent: "CYBERSOURCE",
-            user: customerToken,
-            mode: mode,
-            entry_mode: entry_mode,
-            // is_account_verification: mode === "instrument",
-            currency,
-            amount: amount * 100,
-
-            // plan_id: planId,
-        }),
+        body: JSON.stringify(body),
     });
 
     const text = await res.text();
-    // console.log("[Safepay] createTracker status:", res.status, "body:", text);
-
     let data;
     try { data = JSON.parse(text); } catch { throw new Error("Invalid JSON from Safepay: " + text); }
     if (!res.ok) throw new Error("Safepay tracker error: " + JSON.stringify(data));
 
-
-
-    console.log("tracker data: ", JSON.stringify(data));
     // v3 response: { data: { tracker: { token: "track_..." } } }
     const tracker = data?.data?.tracker;
     if (!tracker?.token) throw new Error("No tracker token returned: " + text);
-    console.log(`[Safepay] createTracker successful for token: ${tracker.token}`);
     return tracker;
 };
 
@@ -115,14 +111,19 @@ const getAuthToken = async () => {
 // ─── Customer ─────────────────────────────────────────────────────────────────
 
 const getOrCreateSafepayCustomer = async (user) => {
-    console.log("existing token:", user.safepayCustomerToken);
-
     if (user.safepayCustomerToken) {
-        console.log(`[Safepay] Using existing customer token: ${user.safepayCustomerToken} for user: ${user.email}`);
         return user.safepayCustomerToken;
     }
 
-    console.log(`[Safepay] Creating new customer for user: ${user.email}`);
+    // Split displayName into first/last for Safepay customer record
+    const nameParts = (user.displayName || 'User').trim().split(/\s+/);
+    const firstName = nameParts[0];
+    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : firstName;
+
+    // NOTE: Phone number is not collected at signup.
+    // Safepay requires it — we pass a placeholder but this should be
+    // replaced once phone collection is added to the onboarding flow.
+    const phoneNumber = '+920000000000';
 
     const res = await fetch(`${HOST}/user/customers/v1/`, {
         method: "POST",
@@ -131,12 +132,10 @@ const getOrCreateSafepayCustomer = async (user) => {
             "X-SFPY-MERCHANT-SECRET": process.env.SAFEPAY_SECRET_KEY,
         },
         body: JSON.stringify({
-
-            first_name: "David",
-            last_name: "Hameed",
-            phone_number: "+923000000000",
+            first_name: firstName,
+            last_name: lastName,
+            phone_number: phoneNumber,
             email: user.email,
-
             country: "PK",
             is_guest: false,
         }),
@@ -151,7 +150,6 @@ const getOrCreateSafepayCustomer = async (user) => {
     user.safepayCustomerToken = token;
     await user.save();
 
-    console.log(`[Safepay] Created new customer token: ${token} for user: ${user.email}`);
     return token;
 };
 
@@ -206,7 +204,6 @@ const getWallet = async (customerToken) => {
 // ─── Delete saved payment method ──────────────────────────────────────────────
 
 const deletePaymentMethod = async (customerToken, instrumentToken) => {
-    console.log(`[Safepay] Deleting payment method: customer=${customerToken}, pm=${instrumentToken}`);
     const res = await fetch(
         `${HOST}/user/customers/v1/${customerToken}/wallet/${instrumentToken}`,
         {
@@ -279,7 +276,6 @@ const deletePaymentMethod = async (customerToken, instrumentToken) => {
 // };
 
 const chargesavedCard = async (customerToken, paymentMethodToken, amount, currency = "PKR") => {
-    console.log(`[Safepay] Charging saved card: customer=${customerToken}, pm=${paymentMethodToken}, amount=${amount}`);
 
     // Step 1: Create the unscheduled_cof tracker
     const res = await fetch(`${HOST}/order/payments/v3/`, {
@@ -308,7 +304,7 @@ const chargesavedCard = async (customerToken, paymentMethodToken, amount, curren
         throw { code: 'TRACKER_CREATE_FAILED', message: "Safepay create tracker error: " + JSON.stringify(data) };
     }
 
-    console.log(`[Safepay] Created Charge Tracker:`, JSON.stringify(data));
+
 
     const trackerToken = data?.data?.tracker?.token;
     if (!trackerToken) throw { code: 'TRACKER_CREATE_FAILED', message: "No tracker token in response" };
@@ -351,7 +347,6 @@ const chargesavedCard = async (customerToken, paymentMethodToken, amount, curren
         throw { code: 'CHARGE_DECLINED', message: "Payment was not authorized or captured successfully." };
     }
 
-    console.log(`[Safepay] Executed Charge Response:`, JSON.stringify(actionData));
     return actionData;
 };
 
@@ -361,7 +356,6 @@ const chargesavedCard = async (customerToken, paymentMethodToken, amount, curren
 // ─── Fetch Tracker Status ────────────────────────────────────────────────────────
 
 const getSafepayTrackerStatus = async (trackerToken) => {
-    console.log(`[Safepay] Fetching tracker status for: ${trackerToken}`);
     const res = await fetch(`${HOST}/reporter/api/v1/payments/${trackerToken}`, {
         method: "GET",
         headers: {
